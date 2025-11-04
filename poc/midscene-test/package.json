@@ -1,0 +1,16 @@
+{
+  "name": "maestro-midscene-poc",
+  "version": "0.1.0",
+  "description": "MidSceneJS视觉引擎PoC验证",
+  "private": true,
+  "scripts": {
+    "test": "ts-node vision-test.ts"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@types/node": "^20.10.6",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.3.3"
+  }
+}
+

@@ -1,0 +1,20 @@
+{
+  "name": "maestro-appium-poc",
+  "version": "0.1.0",
+  "description": "Appium环境PoC验证",
+  "private": true,
+  "scripts": {
+    "test": "ts-node simple-test.ts",
+    "test:watch": "nodemon --watch . --ext ts --exec ts-node simple-test.ts"
+  },
+  "dependencies": {
+    "webdriverio": "^8.28.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.6",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.3.3",
+    "nodemon": "^3.0.2"
+  }
+}
+

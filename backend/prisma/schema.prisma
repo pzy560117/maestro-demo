@@ -1,0 +1,606 @@
+// Prisma Schema for Maestro - LLM-driven UI Automation System
+// 遵循数据库设计.md中的规范
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// 应用维度
+// ============================================
+
+/// 应用信息表
+model App {
+  id           String       @id @default(uuid()) @db.Uuid
+  name         String       @unique @db.Text
+  packageName  String       @unique @map("package_name") @db.Text
+  description  String?      @db.Text
+  createdAt    DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+  
+  // 关联
+  versions     AppVersion[]
+
+  @@map("apps")
+  @@index([packageName], name: "idx_apps_package_name")
+}
+
+/// 应用版本表
+model AppVersion {
+  id          String    @id @default(uuid()) @db.Uuid
+  appId       String    @map("app_id") @db.Uuid
+  versionName String    @map("version_name") @db.Text
+  versionCode Int?      @map("version_code")
+  changelog   String?   @db.Text
+  apkHash     String?   @map("apk_hash") @db.Text
+  releasedAt  DateTime? @map("released_at") @db.Timestamptz(3)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  
+  // 关联
+  app         App       @relation(fields: [appId], references: [id], onDelete: Cascade)
+  tasks       Task[]
+  screens     Screen[]
+
+  @@unique([appId, versionName])
+  @@map("app_versions")
+  @@index([appId], name: "idx_app_versions_app_id")
+}
+
+// ============================================
+// 设备与任务域
+// ============================================
+
+/// 设备类型枚举
+enum DeviceType {
+  REAL
+  EMULATOR
+
+  @@map("device_type_enum")
+}
+
+/// 设备状态枚举
+enum DeviceStatus {
+  AVAILABLE
+  BUSY
+  OFFLINE
+  DECOMMISSIONED
+
+  @@map("device_status_enum")
+}
+
+/// 设备表
+model Device {
+  id              String       @id @default(uuid()) @db.Uuid
+  serial          String       @unique @db.Text
+  model           String       @db.Text
+  osVersion       String       @map("os_version") @db.Text
+  deviceType      DeviceType   @map("device_type")
+  resolution      String?      @db.Text
+  status          DeviceStatus @default(AVAILABLE)
+  tags            Json?        @db.JsonB
+  lastHeartbeatAt DateTime?    @map("last_heartbeat_at") @db.Timestamptz(3)
+  createdAt       DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  
+  // 关联
+  taskRuns        TaskRun[]
+
+  @@map("devices")
+  @@index([status], name: "idx_devices_status")
+  @@index([tags], type: Gin, name: "gin_devices_tags")
+}
+
+/// 任务状态枚举
+enum TaskStatus {
+  DRAFT
+  QUEUED
+  RUNNING
+  PAUSED
+  COMPLETED
+  FAILED
+
+  @@map("task_status_enum")
+}
+
+/// 覆盖配置类型
+enum CoverageProfile {
+  FULL
+  SMOKE
+  CUSTOM
+
+  @@map("coverage_profile_enum")
+}
+
+/// 遍历任务表
+model Task {
+  id              String           @id @default(uuid()) @db.Uuid
+  appVersionId    String           @map("app_version_id") @db.Uuid
+  name            String           @db.Text
+  coverageProfile CoverageProfile  @map("coverage_profile")
+  coverageConfig  Json?            @map("coverage_config") @db.JsonB
+  priority        Int              @default(3)
+  status          TaskStatus       @default(DRAFT)
+  createdBy       String?          @map("created_by") @db.Uuid
+  scheduleAt      DateTime?        @map("schedule_at") @db.Timestamptz(3)
+  createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+  
+  // 关联
+  appVersion      AppVersion       @relation(fields: [appVersionId], references: [id], onDelete: Cascade)
+  taskRuns        TaskRun[]
+
+  @@map("tasks")
+  @@index([status, priority], name: "idx_tasks_status_priority")
+  @@index([appVersionId], name: "idx_tasks_app_ver")
+}
+
+/// 任务运行状态
+enum TaskRunStatus {
+  RUNNING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+
+  @@map("task_run_status_enum")
+}
+
+/// 任务执行记录表
+model TaskRun {
+  id                   String        @id @default(uuid()) @db.Uuid
+  taskId               String        @map("task_id") @db.Uuid
+  deviceId             String        @map("device_id") @db.Uuid
+  orchestratorVersion  String        @map("orchestrator_version") @db.Text
+  status               TaskRunStatus @default(RUNNING)
+  startAt              DateTime      @default(now()) @map("start_at") @db.Timestamptz(3)
+  endAt                DateTime?     @map("end_at") @db.Timestamptz(3)
+  totalActions         Int           @default(0) @map("total_actions")
+  successfulActions    Int           @default(0) @map("successful_actions")
+  coverageScreens      Int           @default(0) @map("coverage_screens")
+  failureReason        String?       @map("failure_reason") @db.Text
+  metrics              Json?         @db.JsonB
+  createdAt            DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  
+  // 关联
+  task                 Task          @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  device               Device        @relation(fields: [deviceId], references: [id], onDelete: Restrict)
+  events               TaskRunEvent[]
+  actions              TaskAction[]
+  llmLogs              LlmLog[]
+  alerts               Alert[]
+  screens              Screen[]
+
+  @@map("task_runs")
+  @@index([taskId, status], name: "idx_task_runs_task_status")
+  @@index([deviceId, startAt], name: "idx_task_runs_device_time")
+}
+
+/// 任务运行事件类型
+enum EventType {
+  STATE_CHANGE
+  ERROR
+  RECOVERY
+  NOTICE
+
+  @@map("event_type_enum")
+}
+
+/// 任务运行事件表
+model TaskRunEvent {
+  id         BigInt    @id @default(autoincrement())
+  taskRunId  String    @map("task_run_id") @db.Uuid
+  eventType  EventType @map("event_type")
+  detail     Json      @db.JsonB
+  occurredAt DateTime  @default(now()) @map("occurred_at") @db.Timestamptz(3)
+  
+  // 关联
+  taskRun    TaskRun   @relation(fields: [taskRunId], references: [id], onDelete: Cascade)
+
+  @@map("task_run_events")
+  @@index([taskRunId, occurredAt], name: "idx_task_run_events_run_time")
+}
+
+// ============================================
+// 操作与界面资产
+// ============================================
+
+/// 动作类型
+enum ActionType {
+  CLICK
+  INPUT
+  SCROLL
+  NAVIGATE
+  CUSTOM
+
+  @@map("action_type_enum")
+}
+
+/// 动作状态
+enum ActionStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  SKIPPED
+
+  @@map("action_status_enum")
+}
+
+/// 任务动作表
+model TaskAction {
+  id          String       @id @default(uuid()) @db.Uuid
+  taskRunId   String       @map("task_run_id") @db.Uuid
+  sequence    Int
+  actionType  ActionType   @map("action_type")
+  params      Json         @db.JsonB
+  status      ActionStatus @default(PENDING)
+  startedAt   DateTime?    @map("started_at") @db.Timestamptz(3)
+  completedAt DateTime?    @map("completed_at") @db.Timestamptz(3)
+  durationMs  Int?         @map("duration_ms")
+  errorCode   String?      @map("error_code") @db.Text
+  errorMessage String?     @map("error_message") @db.Text
+  llmLogId    String?      @map("llm_log_id") @db.Uuid
+  screenId    String?      @map("screen_id") @db.Uuid
+  createdAt   DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  
+  // 关联
+  taskRun     TaskRun      @relation(fields: [taskRunId], references: [id], onDelete: Cascade)
+  llmLog      LlmLog?      @relation(fields: [llmLogId], references: [id], onDelete: SetNull)
+  screen      Screen?      @relation(fields: [screenId], references: [id], onDelete: SetNull)
+
+  @@map("task_actions")
+  @@index([taskRunId, sequence], name: "idx_task_actions_run_sequence")
+  @@index([status], name: "idx_task_actions_status")
+}
+
+/// 界面方向
+enum ScreenOrientation {
+  PORTRAIT
+  LANDSCAPE
+
+  @@map("screen_orientation_enum")
+}
+
+/// 界面表
+model Screen {
+  id                 String            @id @default(uuid()) @db.Uuid
+  appVersionId       String            @map("app_version_id") @db.Uuid
+  signature          String            @db.Text
+  domHash            String            @map("dom_hash") @db.Text
+  primaryText        String?           @map("primary_text") @db.Text
+  screenshotPath     String            @map("screenshot_path") @db.Text
+  screenshotThumbPath String?          @map("screenshot_thumb_path") @db.Text
+  domPath            String            @map("dom_path") @db.Text
+  orientation        ScreenOrientation
+  width              Int
+  height             Int
+  capturedAt         DateTime          @map("captured_at") @db.Timestamptz(3)
+  deviceModel        String?           @map("device_model") @db.Text
+  sourceTaskRunId    String?           @map("source_task_run_id") @db.Uuid
+  sourceActionId     String?           @map("source_action_id") @db.Uuid
+  metadata           Json?             @db.JsonB
+  createdAt          DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  
+  // 关联
+  appVersion         AppVersion        @relation(fields: [appVersionId], references: [id], onDelete: Cascade)
+  sourceTaskRun      TaskRun?          @relation(fields: [sourceTaskRunId], references: [id], onDelete: SetNull)
+  elements           Element[]
+  taskActions        TaskAction[]
+  llmLogs            LlmLog[]
+  alerts             Alert[]
+  baseDiffs          ScreenDiff[]      @relation("BaseScreen")
+  targetDiffs        ScreenDiff[]      @relation("TargetScreen")
+
+  @@unique([appVersionId, signature])
+  @@map("screens")
+  @@index([signature], name: "idx_screens_signature")
+  @@index([capturedAt], name: "idx_screens_captured_at")
+}
+
+/// 元素可见性
+enum ElementVisibility {
+  VISIBLE
+  HIDDEN
+  GONE
+
+  @@map("element_visibility_enum")
+}
+
+/// 元素表
+model Element {
+  id                 String              @id @default(uuid()) @db.Uuid
+  screenId           String              @map("screen_id") @db.Uuid
+  elementHash        String              @map("element_hash") @db.Text
+  elementType        String              @map("element_type") @db.Text
+  resourceId         String?             @map("resource_id") @db.Text
+  contentDesc        String?             @map("content_desc") @db.Text
+  textValue          String?             @map("text_value") @db.Text
+  accessibilityLabel String?             @map("accessibility_label") @db.Text
+  xpath              String?             @db.Text
+  bounds             Json                @db.JsonB
+  visibility         ElementVisibility
+  interactable       Boolean
+  version            Int                 @default(1)
+  createdAt          DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime            @updatedAt @map("updated_at") @db.Timestamptz(3)
+  
+  // 关联
+  screen             Screen              @relation(fields: [screenId], references: [id], onDelete: Cascade)
+  locatorCandidates  LocatorCandidate[]
+  alerts             Alert[]
+
+  @@unique([screenId, elementHash, version])
+  @@map("elements")
+  @@index([screenId, visibility], name: "idx_elements_screen_visibility")
+}
+
+/// 定位策略类型
+enum LocatorStrategy {
+  ID
+  TEXT
+  ACCESSIBILITY_ID
+  XPATH
+  IMAGE_TEMPLATE
+  CUSTOM
+
+  @@map("locator_strategy_enum")
+}
+
+/// 定位来源
+enum LocatorSource {
+  DOM
+  VISION
+  HISTORICAL
+  MANUAL
+
+  @@map("locator_source_enum")
+}
+
+/// 定位候选表
+model LocatorCandidate {
+  id              String               @id @default(uuid()) @db.Uuid
+  elementId       String               @map("element_id") @db.Uuid
+  strategy        LocatorStrategy
+  locatorValue    String               @map("locator_value") @db.Text
+  score           Decimal              @db.Decimal(4, 3)
+  source          LocatorSource
+  isPrimary       Boolean              @default(false) @map("is_primary")
+  dynamicFlags    Json?                @map("dynamic_flags") @db.JsonB
+  successRate     Decimal              @default(0) @map("success_rate") @db.Decimal(5, 2)
+  lastVerifiedAt  DateTime?            @map("last_verified_at") @db.Timestamptz(3)
+  createdAt       DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime             @updatedAt @map("updated_at") @db.Timestamptz(3)
+  
+  // 关联
+  element         Element              @relation(fields: [elementId], references: [id], onDelete: Cascade)
+  validations     ElementValidation[]
+
+  @@map("locator_candidates")
+  @@index([elementId, strategy], name: "idx_locator_element_strategy")
+  @@index([isPrimary], name: "idx_locator_primary")
+}
+
+/// 验证类型
+enum ValidationType {
+  CLICK
+  HIGHLIGHT
+  VISIBILITY
+  EXISTENCE
+
+  @@map("validation_type_enum")
+}
+
+/// 验证状态
+enum ValidationStatus {
+  PASSED
+  FAILED
+  RETRY
+  SKIPPED
+
+  @@map("validation_status_enum")
+}
+
+/// 元素验证表
+model ElementValidation {
+  id                  String           @id @default(uuid()) @db.Uuid
+  locatorCandidateId  String           @map("locator_candidate_id") @db.Uuid
+  taskRunId           String           @map("task_run_id") @db.Uuid
+  validationType      ValidationType   @map("validation_type")
+  status              ValidationStatus
+  attemptAt           DateTime         @map("attempt_at") @db.Timestamptz(3)
+  latencyMs           Int?             @map("latency_ms")
+  screenshotPath      String?          @map("screenshot_path") @db.Text
+  notes               String?          @db.Text
+  
+  // 关联
+  locatorCandidate    LocatorCandidate @relation(fields: [locatorCandidateId], references: [id], onDelete: Cascade)
+
+  @@map("element_validations")
+  @@index([locatorCandidateId], name: "idx_element_validations_candidate")
+  @@index([status], name: "idx_element_validations_status")
+}
+
+/// 界面差异表
+model ScreenDiff {
+  id               String   @id @default(uuid()) @db.Uuid
+  baseScreenId     String   @map("base_screen_id") @db.Uuid
+  targetScreenId   String   @map("target_screen_id") @db.Uuid
+  diffSummary      Json     @map("diff_summary") @db.JsonB
+  diffDetailPath   String?  @map("diff_detail_path") @db.Text
+  generatedAt      DateTime @default(now()) @map("generated_at") @db.Timestamptz(3)
+  
+  // 关联
+  baseScreen       Screen   @relation("BaseScreen", fields: [baseScreenId], references: [id], onDelete: Cascade)
+  targetScreen     Screen   @relation("TargetScreen", fields: [targetScreenId], references: [id], onDelete: Cascade)
+
+  @@unique([baseScreenId, targetScreenId])
+  @@map("screen_diffs")
+}
+
+// ============================================
+// 日志与审计
+// ============================================
+
+/// LLM日志表
+model LlmLog {
+  id                String       @id @default(uuid()) @db.Uuid
+  taskRunId         String       @map("task_run_id") @db.Uuid
+  taskActionId      String?      @map("task_action_id") @db.Uuid
+  screenId          String?      @map("screen_id") @db.Uuid
+  modelName         String       @map("model_name") @db.Text
+  promptTokens      Int          @map("prompt_tokens")
+  completionTokens  Int          @map("completion_tokens")
+  latencyMs         Int          @map("latency_ms")
+  requestPayload    Json         @map("request_payload") @db.JsonB
+  responsePayload   Json         @map("response_payload") @db.JsonB
+  safetyFlags       Json?        @map("safety_flags") @db.JsonB
+  errorCode         String?      @map("error_code") @db.Text
+  cost              Decimal?     @db.Decimal(10, 4)
+  createdAt         DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  
+  // 关联
+  taskRun           TaskRun      @relation(fields: [taskRunId], references: [id], onDelete: Cascade)
+  screen            Screen?      @relation(fields: [screenId], references: [id], onDelete: SetNull)
+  taskActions       TaskAction[]
+
+  @@map("llm_logs")
+  @@index([taskRunId, createdAt], name: "idx_llm_logs_task_run_time")
+  @@index([modelName], name: "idx_llm_logs_model")
+}
+
+/// 告警类型
+enum AlertType {
+  LOCATOR_FAILURE
+  SCREEN_DIFF
+  DEVICE_OFFLINE
+  TOKEN_BUDGET
+  SYSTEM
+
+  @@map("alert_type_enum")
+}
+
+/// 告警严重级别
+enum AlertSeverity {
+  P1
+  P2
+  P3
+
+  @@map("alert_severity_enum")
+}
+
+/// 告警状态
+enum AlertStatus {
+  OPEN
+  ACKED
+  RESOLVED
+  SUPPRESSED
+
+  @@map("alert_status_enum")
+}
+
+/// 告警表
+model Alert {
+  id          String          @id @default(uuid()) @db.Uuid
+  taskRunId   String?         @map("task_run_id") @db.Uuid
+  screenId    String?         @map("screen_id") @db.Uuid
+  elementId   String?         @map("element_id") @db.Uuid
+  alertType   AlertType       @map("alert_type")
+  severity    AlertSeverity
+  message     String          @db.Text
+  payload     Json?           @db.JsonB
+  status      AlertStatus     @default(OPEN)
+  triggeredAt DateTime        @default(now()) @map("triggered_at") @db.Timestamptz(3)
+  resolvedAt  DateTime?       @map("resolved_at") @db.Timestamptz(3)
+  ackBy       String?         @map("ack_by") @db.Uuid
+  ackAt       DateTime?       @map("ack_at") @db.Timestamptz(3)
+  
+  // 关联
+  taskRun     TaskRun?        @relation(fields: [taskRunId], references: [id], onDelete: Cascade)
+  screen      Screen?         @relation(fields: [screenId], references: [id], onDelete: SetNull)
+  element     Element?        @relation(fields: [elementId], references: [id], onDelete: SetNull)
+  notifications AlertNotification[]
+
+  @@map("alerts")
+  @@index([status, severity], name: "idx_alerts_status_severity")
+  @@index([triggeredAt], name: "idx_alerts_triggered_at")
+}
+
+/// 通知渠道
+enum NotificationChannel {
+  FEISHU
+  WECHAT
+  EMAIL
+  PHONE
+
+  @@map("notification_channel_enum")
+}
+
+/// 通知发送状态
+enum NotificationSendStatus {
+  PENDING
+  SENT
+  FAILED
+
+  @@map("notification_send_status_enum")
+}
+
+/// 告警通知表
+model AlertNotification {
+  id              String                  @id @default(uuid()) @db.Uuid
+  alertId         String                  @map("alert_id") @db.Uuid
+  channel         NotificationChannel
+  target          String                  @db.Text
+  sendStatus      NotificationSendStatus  @map("send_status") @default(PENDING)
+  responsePayload Json?                   @map("response_payload") @db.JsonB
+  sentAt          DateTime?               @map("sent_at") @db.Timestamptz(3)
+  retryCount      Int                     @default(0) @map("retry_count")
+  
+  // 关联
+  alert           Alert                   @relation(fields: [alertId], references: [id], onDelete: Cascade)
+
+  @@map("alert_notifications")
+  @@index([alertId], name: "idx_alert_notifications_alert")
+  @@index([sendStatus], name: "idx_alert_notifications_status")
+}
+
+// ============================================
+// 支撑性数据
+// ============================================
+
+/// 用户表
+model User {
+  id           String    @id @default(uuid()) @db.Uuid
+  account      String    @unique @db.Text
+  displayName  String    @map("display_name") @db.Text
+  roles        String[]
+  lastLoginAt  DateTime? @map("last_login_at") @db.Timestamptz(3)
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@map("users")
+}
+
+/// 集成配置类型
+enum IntegrationConfigType {
+  LLM
+  MIDSCENE
+  STORAGE
+  ALERT_CHANNEL
+
+  @@map("integration_config_type_enum")
+}
+
+/// 集成配置表
+model IntegrationConfig {
+  id         String                @id @default(uuid()) @db.Uuid
+  configType IntegrationConfigType @map("config_type")
+  name       String                @db.Text
+  secretRef  String                @map("secret_ref") @db.Text
+  config     Json                  @db.JsonB
+  enabled    Boolean               @default(true)
+  updatedAt  DateTime              @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("integration_configs")
+}
+
