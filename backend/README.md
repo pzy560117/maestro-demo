@@ -89,6 +89,7 @@ pnpm test               # 运行单元测试
 pnpm test:watch         # 监听模式
 pnpm test:cov           # 生成覆盖率报告
 pnpm test:e2e           # 运行E2E测试
+pnpm test:llm-api       # 测试LLM API连接（Iteration 1）
 ```
 
 ### 代码质量
@@ -272,13 +273,38 @@ pnpm prisma:generate
 - 设备已连接: `adb devices`
 - 服务器可访问ADB命令
 
-## 下一步
+## 开发进度
 
-### Iteration 1 开发计划
-- [ ] 遍历任务管理模块（TasksModule）
-- [ ] Orchestrator状态机
-- [ ] LLM指令生成服务
-- [ ] 动作执行与回退
+### ✅ Iteration 1 - 遍历指挥调度核心（已完成）
+- ✅ 遍历任务管理模块（TasksModule）
+- ✅ Orchestrator状态机
+- ✅ LLM指令生成服务（**Qwen-VL-Max** - 通义千问旗舰版多模态模型）
+- ✅ 安全检查与白名单
+- ✅ 真实API调用已验证
+
+**当前 LLM 模型**:
+- 🎯 **qwen-vl-max**: 通义千问视觉语言模型旗舰版
+- 📊 **性能**: 最强 UI 理解和推理能力
+- ⏱️ **响应**: ~2.2秒/请求
+- 🔍 **优势**: 专为复杂界面分析优化
+
+**配置文档**: 
+- `QWEN3-SETUP-SUCCESS.md` - LLM配置验证报告
+- `docs/qwen-models-comparison.md` - 模型选择和对比指南 ⭐
+- `docs/iteration-1-delivery-report.md` - 迭代1交付报告
+- `docs/llm-api-setup.md` - LLM API详细配置
+
+**快速验证**:
+```bash
+npm run test:llm-api  # 验证LLM连接
+npm test              # 运行所有测试（46个测试用例）
+```
+
+### 下一步：Iteration 2 - 定位生成与验证
+- [ ] MidSceneJS视觉解析集成
+- [ ] 定位候选生成
+- [ ] 自动验证与截图回放
+- [ ] 界面签名与存档
 
 见 `迭代开发指南.md` 了解完整开发计划
 

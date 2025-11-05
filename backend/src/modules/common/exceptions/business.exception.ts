@@ -71,5 +71,12 @@ export class BusinessException extends HttpException {
   static conflict(message: string, details?: unknown): BusinessException {
     return new BusinessException(409002, message, details, HttpStatus.CONFLICT);
   }
+
+  /**
+   * 错误请求
+   */
+  static badRequest(message: string, details?: unknown): BusinessException {
+    return new BusinessException(400002, message, details, HttpStatus.BAD_REQUEST);
+  }
 }
 

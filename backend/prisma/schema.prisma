@@ -102,6 +102,7 @@ enum TaskStatus {
   PAUSED
   COMPLETED
   FAILED
+  CANCELLED
 
   @@map("task_status_enum")
 }

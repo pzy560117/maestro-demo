@@ -4,6 +4,7 @@ import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './modules/common/filters/http-exception.filter';
 import { AllExceptionsFilter } from './modules/common/filters/all-exceptions.filter';
+import { LoggingInterceptor } from './modules/common/interceptors/logging.interceptor';
 
 /**
  * 应用启动入口
@@ -13,6 +14,9 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
     logger: ['error', 'warn', 'log', 'debug', 'verbose'],
   });
+
+  // 全局日志拦截器 - 记录所有请求
+  app.useGlobalInterceptors(new LoggingInterceptor());
 
   // 全局异常过滤器
   app.useGlobalFilters(
@@ -45,12 +49,27 @@ async function bootstrap() {
   // Swagger文档配置 - 遵循API文档规范
   const config = new DocumentBuilder()
     .setTitle('Maestro API')
-    .setDescription('LLM驱动的手机端UI自动化定位系统 - API文档')
-    .setVersion('0.1.0')
-    .addTag('health', '健康检查')
-    .addTag('devices', '设备管理')
-    .addTag('apps', '应用版本管理')
-    .addTag('tasks', '遍历任务管理（Iteration 1）')
+    .setDescription(`LLM驱动的手机端UI自动化定位系统 - API文档
+    
+    ## Iteration 1 - 遍历指挥调度核心
+    本迭代实现了核心的任务调度和LLM指令生成功能：
+    - ✅ 遍历任务创建与管理（FR-01）
+    - ✅ Orchestrator 状态机调度（FR-02）
+    - ✅ LLM 指令生成与安全控制（FR-03/04）
+    
+    ## 技术栈
+    - NestJS + TypeScript + Prisma
+    - PostgreSQL 数据库
+    - Qwen3-VL 多模态大模型（Mock）
+    - Appium + MidSceneJS（集成中）
+    `)
+    .setVersion('1.0.0-iteration1')
+    .addTag('Health', '健康检查')
+    .addTag('Devices', '设备管理')
+    .addTag('Apps', '应用与版本管理')
+    .addTag('Tasks', '遍历任务管理（Iteration 1 - FR-01）')
+    .addTag('Orchestrator', '调度器管理（Iteration 1 - FR-02）')
+    .addTag('LLM', 'LLM 指令生成（Iteration 1 - FR-03/04）')
     .addBearerAuth()
     .build();
 

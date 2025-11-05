@@ -60,6 +60,30 @@ services:
     networks:
       - maestro-network
 
+  # Appium Server
+  appium:
+    image: appium/appium:v2.5.1-p0
+    container_name: maestro-appium
+    ports:
+      - "4723:4723"
+    environment:
+      - APPIUM_HOST=0.0.0.0
+      - APPIUM_PORT=4723
+    privileged: true
+    # volumes:
+      # 如果使用 USB 连接的真实设备，需要挂载 USB 设备
+      # Windows: 不支持直接挂载 USB
+      # Linux/macOS: 取消下面的注释
+      # - /dev/bus/usb:/dev/bus/usb
+    command: appium --log-level info
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4723/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - maestro-network
+
   # Maestro后端服务（本地开发时注释掉，使用 npm run start:dev）
   # backend:
   #   build:

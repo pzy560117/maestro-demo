@@ -18,8 +18,10 @@ import {
   ApiOkResponse,
 } from '@nestjs/swagger';
 import { AppsService } from './apps.service';
+import { AppVersionsService } from './app-versions.service';
 import { CreateAppDto } from './dto/create-app.dto';
-import { AppResponseDto } from './dto/app-response.dto';
+import { CreateAppVersionDto } from './dto/create-app-version.dto';
+import { AppResponseDto, AppVersionResponseDto } from './dto/app-response.dto';
 import { BaseResponseDto } from '../common/dto/base-response.dto';
 
 /**
@@ -28,7 +30,10 @@ import { BaseResponseDto } from '../common/dto/base-response.dto';
 @ApiTags('apps')
 @Controller('apps')
 export class AppsController {
-  constructor(private readonly appsService: AppsService) {}
+  constructor(
+    private readonly appsService: AppsService,
+    private readonly appVersionsService: AppVersionsService,
+  ) {}
 
   /**
    * 创建应用
@@ -113,6 +118,46 @@ export class AppsController {
   })
   async remove(@Param('id') id: string): Promise<void> {
     await this.appsService.remove(id);
+  }
+
+  /**
+   * 创建应用版本（嵌套路由）
+   * POST /apps/:id/versions
+   */
+  @Post(':id/versions')
+  @ApiOperation({ summary: '创建应用版本', description: '为指定应用创建新版本' })
+  @ApiParam({ name: 'id', description: '应用ID' })
+  @ApiCreatedResponse({
+    description: '版本创建成功',
+    type: AppVersionResponseDto,
+  })
+  async createVersion(
+    @Param('id') appId: string,
+    @Body() createVersionDto: Omit<CreateAppVersionDto, 'appId'>,
+  ): Promise<BaseResponseDto<AppVersionResponseDto>> {
+    // 合并路径参数和请求体
+    const versionData: CreateAppVersionDto = {
+      appId,
+      ...createVersionDto,
+    };
+    const version = await this.appVersionsService.create(versionData);
+    return BaseResponseDto.success(version, '应用版本创建成功');
+  }
+
+  /**
+   * 查询应用的所有版本（嵌套路由）
+   * GET /apps/:id/versions
+   */
+  @Get(':id/versions')
+  @ApiOperation({ summary: '查询应用的所有版本' })
+  @ApiParam({ name: 'id', description: '应用ID' })
+  @ApiOkResponse({
+    description: '版本列表',
+    type: [AppVersionResponseDto],
+  })
+  async findVersions(@Param('id') appId: string): Promise<BaseResponseDto<AppVersionResponseDto[]>> {
+    const versions = await this.appVersionsService.findByAppId(appId);
+    return BaseResponseDto.success(versions);
   }
 }
 

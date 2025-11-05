@@ -18,6 +18,8 @@
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
+    "test:integration": "jest --config ./test/jest-e2e.json integration.e2e-spec.ts",
+    "test:llm-api": "ts-node scripts/test-llm-api.ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
@@ -28,19 +30,25 @@
   },
   "dependencies": {
     "@nestjs/common": "^10.3.0",
+    "@nestjs/config": "^3.1.1",
     "@nestjs/core": "^10.3.0",
     "@nestjs/platform-express": "^10.3.0",
-    "@nestjs/config": "^3.1.1",
+    "@nestjs/platform-socket.io": "^10.4.20",
     "@nestjs/swagger": "^7.1.17",
+    "@nestjs/websockets": "^10.4.20",
     "@prisma/client": "^5.7.1",
-    "class-validator": "^0.14.0",
+    "appium": "^2.5.1",
     "class-transformer": "^0.5.1",
+    "class-validator": "^0.14.0",
+    "minio": "^7.1.3",
     "reflect-metadata": "^0.2.1",
     "rxjs": "^7.8.1",
+    "sharp": "^0.33.0",
+    "socket.io": "^4.8.1",
+    "socket.io-client": "^4.8.1",
     "uuid": "^9.0.1",
-    "winston": "^3.11.0",
-    "appium": "^2.5.1",
-    "webdriverio": "^8.28.0"
+    "webdriverio": "^8.28.0",
+    "winston": "^3.11.0"
   },
   "devDependencies": {
     "@nestjs/cli": "^10.2.1",
@@ -85,4 +93,3 @@
     "testEnvironment": "node"
   }
 }
-

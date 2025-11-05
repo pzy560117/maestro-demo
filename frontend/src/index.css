@@ -1,0 +1,90 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 222 47% 11%; /* #0E111A */
+    --foreground: 222 47% 96%; /* #F6F7FB */
+
+    --card: 225 19% 14%; /* #1B1F2B */
+    --card-foreground: 222 47% 96%;
+
+    --popover: 225 19% 14%;
+    --popover-foreground: 222 47% 96%;
+
+    --primary: 230 100% 64%; /* #4C6FFF - Electric Indigo */
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 225 19% 14%;
+    --secondary-foreground: 222 47% 96%;
+
+    --muted: 217 19% 27%;
+    --muted-foreground: 222 16% 61%; /* #9BA8C7 */
+
+    --accent: 161 78% 68%; /* #5FE1B7 - Neon Mint */
+    --accent-foreground: 222 47% 11%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 217 19% 27%;
+    --input: 217 19% 27%;
+    --ring: 230 100% 64%;
+
+    --radius: 0.75rem;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'Inter', 'PingFang SC', 'Microsoft Yahei', sans-serif;
+  }
+}
+
+@layer utilities {
+  /* Glassmorphism effect */
+  .glass {
+    background: rgba(27, 31, 43, 0.65);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+  }
+
+  /* Bento card styles */
+  .bento-card {
+    @apply glass rounded-3xl p-6 transition-all duration-300;
+    box-shadow: 0 24px 48px rgba(12, 15, 24, 0.45);
+  }
+
+  .bento-card:hover {
+    box-shadow: 0 24px 40px rgba(76, 111, 255, 0.25);
+    transform: translateY(-2px);
+  }
+
+  /* Gradient backgrounds */
+  .gradient-primary {
+    background: linear-gradient(135deg, rgba(76, 111, 255, 0.85), rgba(95, 225, 183, 0.65));
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-background;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-muted rounded-full;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-muted-foreground;
+}
+
