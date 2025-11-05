@@ -73,8 +73,13 @@ export class AlertsController {
     return {
       code: 0,
       message: '查询成功',
-      data: result.items,
-      pagination: result.pagination,
+      data: {
+        items: result.items,
+        total: result.pagination.total,
+        page: result.pagination.page,
+        limit: result.pagination.limit,
+        totalPages: result.pagination.totalPages,
+      },
       traceId: `alert-list-${Date.now()}`,
     };
   }
@@ -82,7 +87,7 @@ export class AlertsController {
   /**
    * 获取告警统计
    */
-  @Get('statistics')
+  @Get('stats')
   @ApiOperation({
     summary: '获取告警统计',
     description: '按严重级别、类型、状态统计告警数量',

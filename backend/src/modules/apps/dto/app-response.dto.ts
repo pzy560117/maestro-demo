@@ -37,14 +37,14 @@ export class AppVersionResponseDto {
   @ApiProperty({ description: '应用ID', example: 'uuid' })
   appId!: string;
 
-  @ApiProperty({ description: '版本名称', example: '6.3.1' })
-  versionName!: string;
+  @ApiProperty({ description: '版本名称', example: '1.0.0' })
+  version!: string;
 
-  @ApiPropertyOptional({ description: '版本号', example: 631 })
+  @ApiPropertyOptional({ description: '版本号', example: 100 })
   versionCode?: number | null;
 
   @ApiPropertyOptional({ description: '版本说明' })
-  changelog?: string | null;
+  releaseNotes?: string | null;
 
   @ApiPropertyOptional({ description: 'APK哈希值' })
   apkHash?: string | null;
@@ -58,8 +58,19 @@ export class AppVersionResponseDto {
   @ApiPropertyOptional({ description: '应用信息' })
   app?: AppResponseDto;
 
-  constructor(partial: Partial<AppVersionResponseDto>) {
-    Object.assign(this, partial);
+  constructor(partial: any) {
+    // 映射字段：Prisma -> DTO
+    this.id = partial.id;
+    this.appId = partial.appId;
+    this.version = partial.versionName; // Prisma 字段映射
+    this.versionCode = partial.versionCode;
+    this.releaseNotes = partial.changelog; // Prisma 字段映射
+    this.apkHash = partial.apkHash;
+    this.releasedAt = partial.releasedAt;
+    this.createdAt = partial.createdAt;
+    if (partial.app) {
+      this.app = new AppResponseDto(partial.app);
+    }
   }
 }
 

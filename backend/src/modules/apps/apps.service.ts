@@ -3,6 +3,7 @@ import { PrismaService } from '../common/prisma/prisma.service';
 import { BusinessException } from '../common/exceptions/business.exception';
 import { CreateAppDto } from './dto/create-app.dto';
 import { AppResponseDto } from './dto/app-response.dto';
+import { AdbService } from '../devices/services/adb.service';
 
 /**
  * 应用管理服务
@@ -11,7 +12,10 @@ import { AppResponseDto } from './dto/app-response.dto';
 export class AppsService {
   private readonly logger = new Logger(AppsService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly adbService: AdbService,
+  ) {}
 
   /**
    * 创建应用
@@ -48,14 +52,37 @@ export class AppsService {
   }
 
   /**
-   * 查询所有应用
+   * 查询所有应用（支持分页）
    */
-  async findAll(): Promise<AppResponseDto[]> {
-    const apps = await this.prisma.app.findMany({
-      orderBy: { createdAt: 'desc' },
-    });
+  async findAll(params?: { page?: number; limit?: number }): Promise<{
+    items: AppResponseDto[];
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  }> {
+    const page = params?.page || 1;
+    const limit = params?.limit || 20;
+    const skip = (page - 1) * limit;
 
-    return apps.map((app) => new AppResponseDto(app));
+    const [apps, total] = await Promise.all([
+      this.prisma.app.findMany({
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.app.count(),
+    ]);
+
+    const totalPages = Math.ceil(total / limit);
+
+    return {
+      items: apps.map((app) => new AppResponseDto(app)),
+      total,
+      page,
+      limit,
+      totalPages,
+    };
   }
 
   /**
@@ -149,6 +176,131 @@ export class AppsService {
     });
 
     this.logger.log(`App deleted: ${app.name}`);
+  }
+
+  /**
+   * 扫描设备上的已安装应用
+   * @param deviceId 设备ID（可选，如果不提供则使用第一个在线设备）
+   * @returns 扫描到的应用列表，标记是否已存在于数据库中
+   */
+  async scanApps(deviceId?: string): Promise<Array<{
+    packageName: string;
+    appName: string;
+    versionName: string;
+    versionCode: number;
+    isExisting: boolean;
+  }>> {
+    // 1. 获取设备序列号
+    let serial: string;
+
+    if (deviceId) {
+      const device = await this.prisma.device.findUnique({
+        where: { id: deviceId },
+      });
+      if (!device) {
+        throw BusinessException.notFound('设备', deviceId);
+      }
+      serial = device.serial;
+    } else {
+      // 使用第一个在线设备
+      const onlineDevices = await this.adbService.getOnlineDevices();
+      if (onlineDevices.length === 0) {
+        throw BusinessException.badRequest('没有在线设备');
+      }
+      serial = onlineDevices[0];
+    }
+
+    this.logger.log(`Scanning apps on device: ${serial}`);
+
+    // 2. 获取设备上的应用列表（排除系统应用）
+    const installedApps = await this.adbService.getInstalledPackages(serial, false);
+
+    // 3. 检查哪些应用已经在数据库中
+    const existingApps = await this.prisma.app.findMany({
+      where: {
+        packageName: {
+          in: installedApps.map(app => app.packageName),
+        },
+      },
+      select: {
+        packageName: true,
+      },
+    });
+
+    const existingPackageNames = new Set(existingApps.map(app => app.packageName));
+
+    // 4. 返回扫描结果，标记是否已存在
+    const scanResults = installedApps.map(app => ({
+      packageName: app.packageName,
+      appName: app.appName,
+      versionName: app.versionName,
+      versionCode: app.versionCode,
+      isExisting: existingPackageNames.has(app.packageName),
+    }));
+
+    this.logger.log(`Found ${scanResults.length} apps, ${existingPackageNames.size} already in database`);
+
+    return scanResults;
+  }
+
+  /**
+   * 批量创建应用
+   * @param apps 应用列表
+   * @returns 批量创建结果
+   */
+  async batchCreate(apps: CreateAppDto[]): Promise<{
+    success: Array<{ id: string; packageName: string; message: string }>;
+    failed: Array<{ packageName: string; error: string; code: string }>;
+    total: number;
+    successCount: number;
+    failedCount: number;
+  }> {
+    const success: Array<{ id: string; packageName: string; message: string }> = [];
+    const failed: Array<{ packageName: string; error: string; code: string }> = [];
+
+    for (const appDto of apps) {
+      try {
+        // 检查是否已存在
+        const existingApp = await this.prisma.app.findUnique({
+          where: { packageName: appDto.packageName },
+        });
+
+        if (existingApp) {
+          failed.push({
+            packageName: appDto.packageName,
+            error: '应用已存在',
+            code: 'DUPLICATE',
+          });
+          continue;
+        }
+
+        // 创建应用
+        const app = await this.create(appDto);
+        success.push({
+          id: app.id,
+          packageName: app.packageName,
+          message: '添加成功',
+        });
+      } catch (error) {
+        this.logger.error(`Failed to create app ${appDto.packageName}`, error);
+        const errorMessage = error instanceof Error ? error.message : '创建失败';
+        failed.push({
+          packageName: appDto.packageName,
+          error: errorMessage,
+          code: 'CREATE_FAILED',
+        });
+      }
+    }
+
+    this.logger.log(`Batch create completed: ${success.length} success, ${failed.length} failed`);
+
+    return {
+      success,
+      failed,
+      total: apps.length,
+      successCount: success.length,
+      failedCount: failed.length,
+    };
   }
 }
 

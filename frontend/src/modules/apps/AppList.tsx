@@ -34,6 +34,9 @@ import {
   ChevronLeft,
   ChevronRight,
   Tag,
+  Search,
+  CheckCircle2,
+  Eye,
 } from 'lucide-react';
 import { AppsApi, AppVersionsApi } from '@/lib/api/apps';
 import { App, CreateAppDto, CreateAppVersionDto } from '@/types/app';
@@ -63,6 +66,18 @@ export function AppList() {
     apkHash: '',
     releaseNotes: '',
   });
+
+  // 扫描应用相关状态
+  const [scanMode, setScanMode] = useState<'manual' | 'scan'>('scan');
+  const [scannedApps, setScannedApps] = useState<Array<{
+    packageName: string;
+    appName: string;
+    versionName: string;
+    versionCode: number;
+    isExisting: boolean;
+  }>>([]);
+  const [selectedAppPackage, setSelectedAppPackage] = useState<string | null>(null);
+  const [isScanning, setIsScanning] = useState(false);
 
   const queryClient = useQueryClient();
 
@@ -129,6 +144,32 @@ export function AppList() {
     },
   });
 
+  // 扫描应用
+  const scanAppsMutation = useMutation({
+    mutationFn: () => {
+      setIsScanning(true);
+      return AppsApi.scanApps();
+    },
+    onSuccess: (data) => {
+      setScannedApps(data);
+      setIsScanning(false);
+    },
+    onError: () => {
+      setIsScanning(false);
+    },
+  });
+
+  // 批量创建应用
+  const batchCreateMutation = useMutation({
+    mutationFn: (apps: CreateAppDto[]) => AppsApi.batchCreateApps(apps),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['apps'] });
+      setCreateAppDialogOpen(false);
+      setScannedApps([]);
+      setSelectedAppPackage(null);
+    },
+  });
+
   /**
    * 重置应用表单
    */
@@ -191,6 +232,19 @@ export function AppList() {
     } else {
       createAppMutation.mutate(appFormData);
     }
+  };
+
+  /**
+   * 快速填充应用信息（从扫描结果）
+   */
+  const handleQuickFillApp = (app: typeof scannedApps[0]) => {
+    setAppFormData({
+      name: app.appName,
+      packageName: app.packageName,
+      description: `版本: ${app.versionName} (${app.versionCode})`,
+    });
+    setSelectedAppPackage(app.packageName);
+    setScanMode('manual');
   };
 
   return (
@@ -289,7 +343,7 @@ export function AppList() {
                 <div className="flex items-center justify-center py-8">
                   <RefreshCw className="h-8 w-8 animate-spin text-muted-foreground" />
                 </div>
-              ) : appsData && appsData.items.length > 0 ? (
+              ) : appsData && appsData.items && appsData.items.length > 0 ? (
                 <>
                   <Table>
                     <TableHeader>
@@ -419,7 +473,7 @@ export function AppList() {
                 <div className="flex items-center justify-center py-8">
                   <RefreshCw className="h-6 w-6 animate-spin text-muted-foreground" />
                 </div>
-              ) : versionsData && versionsData.items.length > 0 ? (
+              ) : versionsData && versionsData.items && versionsData.items.length > 0 ? (
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -483,49 +537,183 @@ export function AppList() {
             setEditAppDialogOpen(false);
             setSelectedApp(null);
             resetAppForm();
+            setScannedApps([]);
+            setSelectedAppPackage(null);
+            setScanMode('scan');
           }
         }}
       >
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editAppDialogOpen ? '编辑应用' : '添加应用'}</DialogTitle>
             <DialogDescription>
-              {editAppDialogOpen ? '更新应用信息' : '添加新的测试应用'}
+              {editAppDialogOpen ? '更新应用信息' : '扫描设备应用或手动添加'}
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="name">应用名称 *</Label>
-              <Input
-                id="name"
-                placeholder="应用名称"
-                value={appFormData.name}
-                onChange={(e) => setAppFormData({ ...appFormData, name: e.target.value })}
-              />
-            </div>
+          {editAppDialogOpen ? (
+            /* 编辑模式：仅显示表单 */
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="name">应用名称 *</Label>
+                <Input
+                  id="name"
+                  placeholder="应用名称"
+                  value={appFormData.name}
+                  onChange={(e) => setAppFormData({ ...appFormData, name: e.target.value })}
+                />
+              </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="packageName">包名 *</Label>
-              <Input
-                id="packageName"
-                placeholder="com.example.app"
-                value={appFormData.packageName}
-                onChange={(e) => setAppFormData({ ...appFormData, packageName: e.target.value })}
-                disabled={editAppDialogOpen}
-              />
-            </div>
+              <div className="space-y-2">
+                <Label htmlFor="packageName">包名 *</Label>
+                <Input
+                  id="packageName"
+                  placeholder="com.example.app"
+                  value={appFormData.packageName}
+                  onChange={(e) => setAppFormData({ ...appFormData, packageName: e.target.value })}
+                  disabled={true}
+                />
+              </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="description">描述（可选）</Label>
-              <Input
-                id="description"
-                placeholder="应用描述"
-                value={appFormData.description}
-                onChange={(e) => setAppFormData({ ...appFormData, description: e.target.value })}
-              />
+              <div className="space-y-2">
+                <Label htmlFor="description">描述（可选）</Label>
+                <Input
+                  id="description"
+                  placeholder="应用描述"
+                  value={appFormData.description}
+                  onChange={(e) => setAppFormData({ ...appFormData, description: e.target.value })}
+                />
+              </div>
             </div>
-          </div>
+          ) : (
+            /* 创建模式：扫描应用 + 手动添加 */
+            <Tabs value={scanMode} onValueChange={(v) => setScanMode(v as 'manual' | 'scan')}>
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="scan">
+                  <Search className="mr-2 h-4 w-4" />
+                  扫描应用
+                </TabsTrigger>
+                <TabsTrigger value="manual">
+                  <Plus className="mr-2 h-4 w-4" />
+                  手动添加
+                </TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="scan" className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm text-muted-foreground">扫描连接设备上的第三方应用（排除系统应用）</p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => scanAppsMutation.mutate()}
+                    disabled={isScanning}
+                  >
+                    {isScanning ? (
+                      <>
+                        <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                        扫描中...
+                      </>
+                    ) : (
+                      <>
+                        <Search className="mr-2 h-4 w-4" />
+                        扫描应用
+                      </>
+                    )}
+                  </Button>
+                </div>
+
+                {scannedApps.length > 0 ? (
+                  <div className="border rounded-lg max-h-96 overflow-y-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>应用名称</TableHead>
+                          <TableHead>包名</TableHead>
+                          <TableHead>版本</TableHead>
+                          <TableHead>状态</TableHead>
+                          <TableHead>操作</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {scannedApps.map((app) => (
+                          <TableRow
+                            key={app.packageName}
+                            className={app.isExisting ? 'opacity-50' : ''}
+                          >
+                            <TableCell className="font-medium">{app.appName}</TableCell>
+                            <TableCell className="font-mono text-xs">{app.packageName}</TableCell>
+                            <TableCell className="text-sm">
+                              {app.versionName} ({app.versionCode})
+                            </TableCell>
+                            <TableCell>
+                              {app.isExisting ? (
+                                <Badge variant="secondary">
+                                  <CheckCircle2 className="mr-1 h-3 w-3" />
+                                  已存在
+                                </Badge>
+                              ) : (
+                                <Badge variant="outline">可添加</Badge>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                disabled={app.isExisting}
+                                onClick={() => handleQuickFillApp(app)}
+                              >
+                                快速添加
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center py-12 border rounded-lg bg-muted/20">
+                    <Package className="h-12 w-12 text-muted-foreground/30 mb-3" />
+                    <p className="text-sm text-muted-foreground">未扫描到应用</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      点击"扫描应用"按钮开始扫描
+                    </p>
+                  </div>
+                )}
+              </TabsContent>
+
+              <TabsContent value="manual" className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="name">应用名称 *</Label>
+                  <Input
+                    id="name"
+                    placeholder="应用名称"
+                    value={appFormData.name}
+                    onChange={(e) => setAppFormData({ ...appFormData, name: e.target.value })}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="packageName">包名 *</Label>
+                  <Input
+                    id="packageName"
+                    placeholder="com.example.app"
+                    value={appFormData.packageName}
+                    onChange={(e) => setAppFormData({ ...appFormData, packageName: e.target.value })}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="description">描述（可选）</Label>
+                  <Input
+                    id="description"
+                    placeholder="应用描述"
+                    value={appFormData.description}
+                    onChange={(e) => setAppFormData({ ...appFormData, description: e.target.value })}
+                  />
+                </div>
+              </TabsContent>
+            </Tabs>
+          )}
 
           <DialogFooter>
             <Button
@@ -535,6 +723,9 @@ export function AppList() {
                 setEditAppDialogOpen(false);
                 setSelectedApp(null);
                 resetAppForm();
+                setScannedApps([]);
+                setSelectedAppPackage(null);
+                setScanMode('scan');
               }}
             >
               取消
@@ -630,6 +821,3 @@ export function AppList() {
     </div>
   );
 }
-
-// 修复缺少的 Eye 图标导入
-import { Eye } from 'lucide-react';

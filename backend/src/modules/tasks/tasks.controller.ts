@@ -75,6 +75,55 @@ export class TasksController {
   }
 
   /**
+   * 获取任务统计信息
+   */
+  @Get('stats')
+  @ApiOperation({
+    summary: '获取任务统计信息',
+    description: '获取任务的统计数据，包括运行中、成功、失败等各状态的任务数量',
+  })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: '任务统计信息',
+  })
+  async getStats(): Promise<{
+    total: number;
+    running: number;
+    queued: number;
+    succeeded: number;
+    failed: number;
+    cancelled: number;
+  }> {
+    return this.tasksService.getStats();
+  }
+
+  /**
+   * 获取待执行任务队列（供 Orchestrator 使用）
+   */
+  @Get('queue/pending')
+  @ApiOperation({
+    summary: '获取待执行任务队列',
+    description: '供 Orchestrator 调度器使用，获取优先级排序的待执行任务',
+  })
+  @ApiQuery({
+    name: 'limit',
+    type: Number,
+    required: false,
+    description: '返回任务数量（默认10）',
+  })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: '待执行任务列表',
+    type: TaskResponseDto,
+    isArray: true,
+  })
+  async getPendingTasks(
+    @Query('limit', new ParseIntPipe({ optional: true })) limit?: number,
+  ): Promise<TaskResponseDto[]> {
+    return this.tasksService.getPendingTasks(limit);
+  }
+
+  /**
    * 查询任务列表（支持筛选和分页）
    */
   @Get()
@@ -95,34 +144,48 @@ export class TasksController {
     description: '应用版本ID筛选',
   })
   @ApiQuery({
+    name: 'page',
+    type: Number,
+    required: false,
+    description: '页码（默认1）',
+  })
+  @ApiQuery({
     name: 'limit',
     type: Number,
     required: false,
-    description: '分页大小（默认20）',
-  })
-  @ApiQuery({
-    name: 'offset',
-    type: Number,
-    required: false,
-    description: '分页偏移量（默认0）',
+    description: '每页数量（默认20）',
   })
   @ApiResponse({
     status: HttpStatus.OK,
-    description: '任务列表',
-    type: TaskResponseDto,
-    isArray: true,
+    description: '任务列表（分页）',
+    schema: {
+      type: 'object',
+      properties: {
+        items: { type: 'array', items: { $ref: '#/components/schemas/TaskResponseDto' } },
+        total: { type: 'number' },
+        page: { type: 'number' },
+        limit: { type: 'number' },
+        totalPages: { type: 'number' },
+      },
+    },
   })
   async findAll(
     @Query('status') status?: TaskStatus,
     @Query('appVersionId') appVersionId?: string,
-    @Query('limit') limit?: string,
-    @Query('offset') offset?: string,
-  ): Promise<{ tasks: TaskResponseDto[]; total: number }> {
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+  ): Promise<{
+    items: TaskResponseDto[];
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  }> {
     return this.tasksService.findAll({
       status,
       appVersionId,
-      limit: limit ? parseInt(limit, 10) : undefined,
-      offset: offset ? parseInt(offset, 10) : undefined,
+      page,
+      limit,
     });
   }
 
@@ -248,32 +311,6 @@ export class TasksController {
     @Param('id', ParseUUIDPipe) id: string,
   ): Promise<TaskResponseDto> {
     return this.tasksService.cancel(id);
-  }
-
-  /**
-   * 获取待执行任务队列（供 Orchestrator 使用）
-   */
-  @Get('queue/pending')
-  @ApiOperation({
-    summary: '获取待执行任务队列',
-    description: '供 Orchestrator 调度器使用，获取优先级排序的待执行任务',
-  })
-  @ApiQuery({
-    name: 'limit',
-    type: Number,
-    required: false,
-    description: '返回任务数量（默认10）',
-  })
-  @ApiResponse({
-    status: HttpStatus.OK,
-    description: '待执行任务列表',
-    type: TaskResponseDto,
-    isArray: true,
-  })
-  async getPendingTasks(
-    @Query('limit', new ParseIntPipe({ optional: true })) limit?: number,
-  ): Promise<TaskResponseDto[]> {
-    return this.tasksService.getPendingTasks(limit);
   }
 }
 

@@ -14,12 +14,12 @@ export class CreateAppVersionDto {
 
   @ApiProperty({
     description: '版本名称',
-    example: '6.3.1',
+    example: '1.0.0',
   })
   @IsString()
   @Length(1, 32, { message: '版本名称长度必须在1-32字符之间' })
   @Matches(/^[\w.-]+$/, { message: '版本名称格式不正确' })
-  versionName!: string;
+  version!: string;
 
   @ApiPropertyOptional({
     description: '版本号（整数）',
@@ -36,7 +36,7 @@ export class CreateAppVersionDto {
   @IsOptional()
   @IsString()
   @Length(0, 1000, { message: '版本说明长度不能超过1000字符' })
-  changelog?: string;
+  releaseNotes?: string;
 
   @ApiPropertyOptional({
     description: 'APK哈希值（SHA256）',

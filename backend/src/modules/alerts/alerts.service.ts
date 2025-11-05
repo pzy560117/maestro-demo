@@ -8,7 +8,7 @@ import {
   QueryAlertDto,
   SendNotificationDto,
 } from './dto';
-import { Alert, AlertStatus, Prisma } from '@prisma/client';
+import { Alert, AlertStatus, AlertSeverity, Prisma } from '@prisma/client';
 
 /**
  * 告警服务
@@ -96,8 +96,8 @@ export class AlertsService {
    * 查询告警列表（带分页和过滤）
    */
   async findAll(query: QueryAlertDto) {
-    const { page = 1, pageSize = 20, ...filters } = query;
-    const skip = (page - 1) * pageSize;
+    const { page = 1, limit = 20, ...filters } = query;
+    const skip = (page - 1) * limit;
 
     // 构建查询条件
     const where: Prisma.AlertWhereInput = {};
@@ -119,7 +119,7 @@ export class AlertsService {
       this.prisma.alert.findMany({
         where,
         skip,
-        take: pageSize,
+        take: limit,
         orderBy: [{ severity: 'asc' }, { triggeredAt: 'desc' }],
         include: {
           taskRun: {
@@ -145,9 +145,9 @@ export class AlertsService {
       items,
       pagination: {
         page,
-        pageSize,
+        limit,
         total,
-        totalPages: Math.ceil(total / pageSize),
+        totalPages: Math.ceil(total / limit),
       },
     };
   }
@@ -305,8 +305,12 @@ export class AlertsService {
       };
     }
 
-    const [total, bySeverity, byType, byStatus] = await Promise.all([
+    const [total, pending, acked, resolved, critical, bySeverity, byType] = await Promise.all([
       this.prisma.alert.count({ where }),
+      this.prisma.alert.count({ where: { ...where, status: AlertStatus.OPEN } }),
+      this.prisma.alert.count({ where: { ...where, status: AlertStatus.ACKED } }),
+      this.prisma.alert.count({ where: { ...where, status: AlertStatus.RESOLVED } }),
+      this.prisma.alert.count({ where: { ...where, severity: AlertSeverity.P1 } }),
       this.prisma.alert.groupBy({
         by: ['severity'],
         where,
@@ -317,25 +321,20 @@ export class AlertsService {
         where,
         _count: { alertType: true },
       }),
-      this.prisma.alert.groupBy({
-        by: ['status'],
-        where,
-        _count: { status: true },
-      }),
     ]);
 
     return {
       total,
+      pending,
+      acked,
+      resolved,
+      critical,
       bySeverity: bySeverity.reduce((acc, item) => {
         acc[item.severity] = item._count.severity;
         return acc;
       }, {} as Record<string, number>),
       byType: byType.reduce((acc, item) => {
         acc[item.alertType] = item._count.alertType;
-        return acc;
-      }, {} as Record<string, number>),
-      byStatus: byStatus.reduce((acc, item) => {
-        acc[item.status] = item._count.status;
         return acc;
       }, {} as Record<string, number>),
     };

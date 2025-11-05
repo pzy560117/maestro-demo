@@ -10,7 +10,7 @@ import { AdbService } from './services/adb.service';
 @Module({
   controllers: [DevicesController],
   providers: [DevicesService, AdbService],
-  exports: [DevicesService],
+  exports: [DevicesService, AdbService],
 })
 export class DevicesModule {}
 

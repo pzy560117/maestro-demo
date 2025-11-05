@@ -8,12 +8,14 @@ import {
   Delete,
   HttpCode,
   HttpStatus,
+  Query,
 } from '@nestjs/common';
 import {
   ApiTags,
   ApiOperation,
   ApiResponse,
   ApiParam,
+  ApiQuery,
   ApiCreatedResponse,
   ApiOkResponse,
 } from '@nestjs/swagger';
@@ -54,17 +56,150 @@ export class DevicesController {
   }
 
   /**
-   * 查询所有设备
+   * 查询所有设备（支持分页）
    * GET /devices
    */
   @Get()
   @ApiOperation({ summary: '查询所有设备' })
+  @ApiQuery({ name: 'page', required: false, description: '页码', example: 1 })
+  @ApiQuery({ name: 'limit', required: false, description: '每页数量', example: 20 })
   @ApiOkResponse({
-    description: '设备列表',
+    description: '设备列表（分页）',
+    schema: {
+      type: 'object',
+      properties: {
+        items: { type: 'array', items: { $ref: '#/components/schemas/DeviceResponseDto' } },
+        total: { type: 'number' },
+        page: { type: 'number' },
+        limit: { type: 'number' },
+        totalPages: { type: 'number' },
+      },
+    },
+  })
+  async findAll(
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+  ): Promise<BaseResponseDto<{
+    items: DeviceResponseDto[];
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  }>> {
+    const result = await this.devicesService.findAll({ page, limit });
+    return BaseResponseDto.success(result);
+  }
+
+  /**
+   * 扫描连接的设备
+   * GET /devices/scan
+   * 注意：必须在 :id 路由之前，避免 scan 被当作 id 参数
+   */
+  @Get('scan')
+  @ApiOperation({ summary: '扫描连接的设备', description: '扫描当前通过ADB连接的所有设备' })
+  @ApiOkResponse({
+    description: '扫描到的设备列表',
+    schema: {
+      type: 'object',
+      properties: {
+        devices: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              serialNumber: { type: 'string' },
+              model: { type: 'string' },
+              androidVersion: { type: 'string' },
+              resolution: { type: 'string', nullable: true },
+              type: { type: 'string', enum: ['REAL', 'EMULATOR'] },
+              status: { type: 'string' },
+              manufacturer: { type: 'string', nullable: true },
+              isExisting: { type: 'boolean' },
+            },
+          },
+        },
+        total: { type: 'number' },
+        scannedAt: { type: 'string', format: 'date-time' },
+      },
+    },
+  })
+  async scanDevices(): Promise<BaseResponseDto<{
+    devices: any[];
+    total: number;
+    scannedAt: string;
+  }>> {
+    const devices = await this.devicesService.scanDevices();
+    const message = devices.length > 0 
+      ? `扫描成功，检测到 ${devices.length} 台设备`
+      : '扫描完成，未检测到连接的设备';
+    
+    return BaseResponseDto.success({
+      devices,
+      total: devices.length,
+      scannedAt: new Date().toISOString(),
+    }, message);
+  }
+
+  /**
+   * 批量添加设备
+   * POST /devices/batch
+   * 注意：必须在 :id 路由之前
+   */
+  @Post('batch')
+  @ApiOperation({ summary: '批量添加设备', description: '批量添加扫描到的设备' })
+  @ApiCreatedResponse({
+    description: '批量添加结果',
+    schema: {
+      type: 'object',
+      properties: {
+        success: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              id: { type: 'string' },
+              serialNumber: { type: 'string' },
+              message: { type: 'string' },
+            },
+          },
+        },
+        failed: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              serialNumber: { type: 'string' },
+              error: { type: 'string' },
+              code: { type: 'string' },
+            },
+          },
+        },
+        total: { type: 'number' },
+        successCount: { type: 'number' },
+        failedCount: { type: 'number' },
+      },
+    },
+  })
+  async batchCreate(
+    @Body() body: { devices: CreateDeviceDto[] },
+  ): Promise<BaseResponseDto<any>> {
+    const result = await this.devicesService.batchCreate(body.devices);
+    return BaseResponseDto.success(result, '批量添加完成');
+  }
+
+  /**
+   * 获取可用设备列表
+   * GET /devices/available/list
+   * 注意：必须在 :id 路由之前
+   */
+  @Get('available/list')
+  @ApiOperation({ summary: '获取可用设备列表', description: '返回状态为AVAILABLE的设备' })
+  @ApiOkResponse({
+    description: '可用设备列表',
     type: [DeviceResponseDto],
   })
-  async findAll(): Promise<BaseResponseDto<DeviceResponseDto[]>> {
-    const devices = await this.devicesService.findAll();
+  async getAvailableDevices(): Promise<BaseResponseDto<DeviceResponseDto[]>> {
+    const devices = await this.devicesService.getAvailableDevices();
     return BaseResponseDto.success(devices);
   }
 
@@ -137,19 +272,5 @@ export class DevicesController {
     return BaseResponseDto.success(undefined, '心跳更新成功');
   }
 
-  /**
-   * 获取可用设备列表
-   * GET /devices/available/list
-   */
-  @Get('available/list')
-  @ApiOperation({ summary: '获取可用设备列表', description: '返回状态为AVAILABLE的设备' })
-  @ApiOkResponse({
-    description: '可用设备列表',
-    type: [DeviceResponseDto],
-  })
-  async getAvailableDevices(): Promise<BaseResponseDto<DeviceResponseDto[]>> {
-    const devices = await this.devicesService.getAvailableDevices();
-    return BaseResponseDto.success(devices);
-  }
 }
 

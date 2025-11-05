@@ -28,58 +28,92 @@ export class DevicesService {
    * 4. 设备状态离线时，系统自动标记为OFFLINE
    */
   async create(createDeviceDto: CreateDeviceDto): Promise<DeviceResponseDto> {
-    const { serial } = createDeviceDto;
+    const { serialNumber } = createDeviceDto;
 
     // 检查设备是否已存在
     const existingDevice = await this.prisma.device.findUnique({
-      where: { serial },
+      where: { serial: serialNumber },
     });
 
     if (existingDevice) {
-      throw BusinessException.alreadyExists('设备', serial);
+      throw BusinessException.alreadyExists('设备', serialNumber);
     }
 
     // 校验设备是否在线（ADB验证）
-    const isOnline = await this.adbService.isDeviceOnline(serial);
+    const isOnline = await this.adbService.isDeviceOnline(serialNumber);
     
     if (!isOnline) {
-      this.logger.warn(`Device ${serial} is offline, marking as OFFLINE`);
+      this.logger.warn(`Device ${serialNumber} is offline, marking as OFFLINE`);
     }
 
     // 如果在线，尝试获取分辨率（若未提供）
     let resolution = createDeviceDto.resolution;
     if (!resolution && isOnline) {
-      resolution = (await this.adbService.getDeviceResolution(serial)) || undefined;
+      resolution = (await this.adbService.getDeviceResolution(serialNumber)) || undefined;
     }
+
+    // 字段映射：DTO -> Prisma
+    // 将androidVersion转换为"Android X"格式
+    const osVersion = createDeviceDto.androidVersion.startsWith('Android ')
+      ? createDeviceDto.androidVersion
+      : `Android ${createDeviceDto.androidVersion}`;
+
+    // 将tags数组转换为JSON对象
+    const tagsJson = createDeviceDto.tags
+      ? createDeviceDto.tags.reduce((acc, tag, index) => ({ ...acc, [`tag${index}`]: tag }), {})
+      : {};
 
     // 创建设备记录
     const device = await this.prisma.device.create({
       data: {
-        serial: createDeviceDto.serial,
+        serial: serialNumber,
         model: createDeviceDto.model,
-        osVersion: createDeviceDto.osVersion,
-        deviceType: createDeviceDto.deviceType,
+        osVersion,
+        deviceType: createDeviceDto.type,
         resolution,
-        tags: (createDeviceDto.tags || {}) as any,
+        tags: tagsJson as any,
         status: isOnline ? DeviceStatus.AVAILABLE : DeviceStatus.OFFLINE,
         lastHeartbeatAt: isOnline ? new Date() : null,
       },
     });
 
-    this.logger.log(`Device created: ${serial}, status: ${device.status}`);
+    this.logger.log(`Device created: ${serialNumber}, status: ${device.status}`);
 
     return new DeviceResponseDto(device);
   }
 
   /**
-   * 查询所有设备
+   * 查询所有设备（支持分页）
    */
-  async findAll(): Promise<DeviceResponseDto[]> {
-    const devices = await this.prisma.device.findMany({
-      orderBy: { createdAt: 'desc' },
-    });
+  async findAll(params?: { page?: number; limit?: number }): Promise<{
+    items: DeviceResponseDto[];
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  }> {
+    const page = params?.page || 1;
+    const limit = params?.limit || 20;
+    const skip = (page - 1) * limit;
 
-    return devices.map((device) => new DeviceResponseDto(device));
+    const [devices, total] = await Promise.all([
+      this.prisma.device.findMany({
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.device.count(),
+    ]);
+
+    const totalPages = Math.ceil(total / limit);
+
+    return {
+      items: devices.map((device) => new DeviceResponseDto(device)),
+      total,
+      page,
+      limit,
+      totalPages,
+    };
   }
 
   /**
@@ -126,22 +160,50 @@ export class DevicesService {
     }
 
     // 如果更新序列号，检查新序列号是否重复
-    if (updateDeviceDto.serial && updateDeviceDto.serial !== existingDevice.serial) {
+    if (updateDeviceDto.serialNumber && updateDeviceDto.serialNumber !== existingDevice.serial) {
       const duplicateDevice = await this.prisma.device.findUnique({
-        where: { serial: updateDeviceDto.serial },
+        where: { serial: updateDeviceDto.serialNumber },
       });
 
       if (duplicateDevice) {
-        throw BusinessException.alreadyExists('设备', updateDeviceDto.serial);
+        throw BusinessException.alreadyExists('设备', updateDeviceDto.serialNumber);
       }
+    }
+
+    // 字段映射：DTO -> Prisma
+    const updateData: any = {};
+    
+    if (updateDeviceDto.serialNumber !== undefined) {
+      updateData.serial = updateDeviceDto.serialNumber;
+    }
+    if (updateDeviceDto.model !== undefined) {
+      updateData.model = updateDeviceDto.model;
+    }
+    if (updateDeviceDto.androidVersion !== undefined) {
+      // 将androidVersion转换为"Android X"格式
+      updateData.osVersion = updateDeviceDto.androidVersion.startsWith('Android ')
+        ? updateDeviceDto.androidVersion
+        : `Android ${updateDeviceDto.androidVersion}`;
+    }
+    if (updateDeviceDto.type !== undefined) {
+      updateData.deviceType = updateDeviceDto.type;
+    }
+    if (updateDeviceDto.resolution !== undefined) {
+      updateData.resolution = updateDeviceDto.resolution;
+    }
+    if (updateDeviceDto.status !== undefined) {
+      updateData.status = updateDeviceDto.status;
+    }
+    if (updateDeviceDto.tags !== undefined) {
+      // 将tags数组转换为JSON对象
+      updateData.tags = updateDeviceDto.tags
+        ? updateDeviceDto.tags.reduce((acc, tag, index) => ({ ...acc, [`tag${index}`]: tag }), {})
+        : {};
     }
 
     const device = await this.prisma.device.update({
       where: { id },
-      data: {
-        ...updateDeviceDto,
-        tags: updateDeviceDto.tags !== undefined ? (updateDeviceDto.tags as any) : undefined,
-      },
+      data: updateData,
     });
 
     this.logger.log(`Device updated: ${device.serial}`);
@@ -206,6 +268,110 @@ export class DevicesService {
     });
 
     return devices.map((device) => new DeviceResponseDto(device));
+  }
+
+  /**
+   * 扫描连接的设备
+   * 调用 ADB 获取所有连接设备的详细信息
+   */
+  async scanDevices(): Promise<Array<{
+    serialNumber: string;
+    model: string;
+    androidVersion: string;
+    resolution: string | null;
+    type: string;
+    status: string;
+    manufacturer: string | null;
+    isExisting: boolean;
+  }>> {
+    this.logger.log('Scanning connected devices...');
+
+    // 获取连接的设备信息
+    const connectedDevices = await this.adbService.getConnectedDevicesInfo();
+
+    // 检查哪些设备已存在于数据库
+    const deviceInfos = await Promise.all(
+      connectedDevices.map(async (device) => {
+        const existing = await this.prisma.device.findUnique({
+          where: { serial: device.serial },
+        });
+
+        return {
+          serialNumber: device.serial,
+          model: device.model,
+          androidVersion: device.androidVersion,
+          resolution: device.resolution,
+          type: device.deviceType,
+          status: device.status,
+          manufacturer: device.manufacturer,
+          isExisting: !!existing,
+        };
+      }),
+    );
+
+    this.logger.log(`Scanned ${deviceInfos.length} devices, ${deviceInfos.filter(d => !d.isExisting).length} are new`);
+
+    return deviceInfos;
+  }
+
+  /**
+   * 批量创建设备
+   * @param devices 设备列表
+   * @returns 创建结果
+   */
+  async batchCreate(devices: CreateDeviceDto[]): Promise<{
+    success: Array<{ id: string; serialNumber: string; message: string }>;
+    failed: Array<{ serialNumber: string; error: string; code: string }>;
+    total: number;
+    successCount: number;
+    failedCount: number;
+  }> {
+    const success: Array<{ id: string; serialNumber: string; message: string }> = [];
+    const failed: Array<{ serialNumber: string; error: string; code: string }> = [];
+
+    for (const deviceDto of devices) {
+      try {
+        // 检查设备是否已存在
+        const existing = await this.prisma.device.findUnique({
+          where: { serial: deviceDto.serialNumber },
+        });
+
+        if (existing) {
+          failed.push({
+            serialNumber: deviceDto.serialNumber,
+            error: '设备已存在',
+            code: 'DEVICE_EXISTS',
+          });
+          continue;
+        }
+
+        // 创建设备
+        const device = await this.create(deviceDto);
+        success.push({
+          id: device.id,
+          serialNumber: device.serialNumber,
+          message: '添加成功',
+        });
+      } catch (error) {
+        this.logger.error(`Failed to create device ${deviceDto.serialNumber}`, error);
+        const errorMessage = error instanceof Error ? error.message : '创建失败';
+        failed.push({
+          serialNumber: deviceDto.serialNumber,
+          error: errorMessage,
+          code: 'CREATE_FAILED',
+        });
+      }
+    }
+
+    this.logger.log(`Batch create completed: ${success.length} success, ${failed.length} failed`);
+
+    return {
+      success,
+      failed,
+      total: devices.length,
+      successCount: success.length,
+      failedCount: failed.length,
+    };
   }
 }
 

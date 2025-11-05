@@ -12,6 +12,7 @@ import { DeviceType } from '@prisma/client';
 /**
  * 创建设备DTO
  * 遵循参数校验规范
+ * 接收前端字段名,在Service层映射到Prisma字段
  */
 export class CreateDeviceDto {
   @ApiProperty({
@@ -22,7 +23,7 @@ export class CreateDeviceDto {
   })
   @IsString()
   @Length(1, 64, { message: '序列号长度必须在1-64字符之间' })
-  serial!: string;
+  serialNumber!: string;
 
   @ApiProperty({
     description: '设备型号',
@@ -34,13 +35,11 @@ export class CreateDeviceDto {
 
   @ApiProperty({
     description: 'Android版本',
-    example: 'Android 13',
+    example: '13',
   })
   @IsString()
-  @Matches(/^Android\s+\d+(\.\d+)?$/, {
-    message: 'Android版本格式不正确，应为"Android X"或"Android X.Y"',
-  })
-  osVersion!: string;
+  @Length(1, 32, { message: 'Android版本长度必须在1-32字符之间' })
+  androidVersion!: string;
 
   @ApiProperty({
     description: '设备类型',
@@ -48,7 +47,7 @@ export class CreateDeviceDto {
     example: DeviceType.EMULATOR,
   })
   @IsEnum(DeviceType, { message: '设备类型必须是REAL或EMULATOR' })
-  deviceType!: DeviceType;
+  type!: DeviceType;
 
   @ApiPropertyOptional({
     description: '屏幕分辨率',
@@ -60,11 +59,10 @@ export class CreateDeviceDto {
   resolution?: string;
 
   @ApiPropertyOptional({
-    description: '设备标签（JSON对象）',
-    example: { location: 'lab-01', mdm: 'enabled' },
+    description: '设备标签（字符串数组）',
+    example: ['测试', '生产'],
   })
   @IsOptional()
-  @IsObject()
-  tags?: Record<string, unknown>;
+  tags?: string[];
 }
 

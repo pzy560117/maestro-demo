@@ -54,8 +54,8 @@ export class AppVersionsController {
   }
 
   /**
-   * 查询应用版本列表
-   * GET /app-versions?appId=xxx
+   * 查询应用版本列表（支持分页）
+   * GET /app-versions?appId=xxx&page=1&limit=20
    */
   @Get()
   @ApiOperation({ summary: '查询应用版本列表' })
@@ -64,18 +64,37 @@ export class AppVersionsController {
     required: false,
     description: '应用ID，若提供则仅返回该应用的版本',
   })
+  @ApiQuery({ name: 'page', required: false, description: '页码', example: 1 })
+  @ApiQuery({ name: 'limit', required: false, description: '每页数量', example: 20 })
   @ApiOkResponse({
-    description: '版本列表',
-    type: [AppVersionResponseDto],
+    description: '版本列表（分页）',
+    schema: {
+      type: 'object',
+      properties: {
+        items: { type: 'array', items: { $ref: '#/components/schemas/AppVersionResponseDto' } },
+        total: { type: 'number' },
+        page: { type: 'number' },
+        limit: { type: 'number' },
+        totalPages: { type: 'number' },
+      },
+    },
   })
   async findAll(
     @Query('appId') appId?: string,
-  ): Promise<BaseResponseDto<AppVersionResponseDto[]>> {
-    const versions = appId
-      ? await this.appVersionsService.findByAppId(appId)
-      : await this.appVersionsService.findAll();
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+  ): Promise<BaseResponseDto<{
+    items: AppVersionResponseDto[];
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  }>> {
+    const result = appId
+      ? await this.appVersionsService.findByAppId(appId, { page, limit })
+      : await this.appVersionsService.findAll({ page, limit });
 
-    return BaseResponseDto.success(versions);
+    return BaseResponseDto.success(result);
   }
 
   /**

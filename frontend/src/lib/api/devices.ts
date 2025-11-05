@@ -54,5 +54,38 @@ export class DevicesApi {
   static async getAvailableDevices(): Promise<Device[]> {
     return ApiClient.get('/devices/available/list');
   }
+
+  /**
+   * 扫描连接的设备
+   */
+  static async scanDevices(): Promise<{
+    devices: Array<{
+      serialNumber: string;
+      model: string;
+      androidVersion: string;
+      resolution: string | null;
+      type: string;
+      status: string;
+      manufacturer: string | null;
+      isExisting: boolean;
+    }>;
+    total: number;
+    scannedAt: string;
+  }> {
+    return ApiClient.get('/devices/scan');
+  }
+
+  /**
+   * 批量添加设备
+   */
+  static async batchCreateDevices(devices: CreateDeviceDto[]): Promise<{
+    success: Array<{ id: string; serialNumber: string; message: string }>;
+    failed: Array<{ serialNumber: string; error: string; code: string }>;
+    total: number;
+    successCount: number;
+    failedCount: number;
+  }> {
+    return ApiClient.post('/devices/batch', { devices });
+  }
 }
 

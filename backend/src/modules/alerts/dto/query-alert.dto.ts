@@ -74,6 +74,6 @@ export class QueryAlertDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  pageSize?: number = 20;
+  limit?: number = 20;
 }
 

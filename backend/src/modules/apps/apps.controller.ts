@@ -8,6 +8,7 @@ import {
   Delete,
   HttpCode,
   HttpStatus,
+  Query,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -16,6 +17,7 @@ import {
   ApiParam,
   ApiCreatedResponse,
   ApiOkResponse,
+  ApiQuery,
 } from '@nestjs/swagger';
 import { AppsService } from './apps.service';
 import { AppVersionsService } from './app-versions.service';
@@ -55,18 +57,128 @@ export class AppsController {
   }
 
   /**
-   * 查询所有应用
+   * 查询所有应用（支持分页）
    * GET /apps
    */
   @Get()
   @ApiOperation({ summary: '查询所有应用' })
+  @ApiQuery({ name: 'page', required: false, description: '页码', example: 1 })
+  @ApiQuery({ name: 'limit', required: false, description: '每页数量', example: 20 })
   @ApiOkResponse({
-    description: '应用列表',
-    type: [AppResponseDto],
+    description: '应用列表（分页）',
+    schema: {
+      type: 'object',
+      properties: {
+        items: { type: 'array', items: { $ref: '#/components/schemas/AppResponseDto' } },
+        total: { type: 'number' },
+        page: { type: 'number' },
+        limit: { type: 'number' },
+        totalPages: { type: 'number' },
+      },
+    },
   })
-  async findAll(): Promise<BaseResponseDto<AppResponseDto[]>> {
-    const apps = await this.appsService.findAll();
-    return BaseResponseDto.success(apps);
+  async findAll(
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+  ): Promise<BaseResponseDto<{
+    items: AppResponseDto[];
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  }>> {
+    const result = await this.appsService.findAll({ page, limit });
+    return BaseResponseDto.success(result);
+  }
+
+  /**
+   * 扫描设备上的应用
+   * GET /apps/scan
+   * 注意：必须在 :id 路由之前，避免 scan 被当作 id 参数
+   */
+  @Get('scan')
+  @ApiOperation({ summary: '扫描设备上的应用', description: '扫描连接设备上已安装的第三方应用（排除系统应用）' })
+  @ApiQuery({ name: 'deviceId', required: false, description: '设备ID（可选，不提供则使用第一个在线设备）' })
+  @ApiOkResponse({
+    description: '扫描到的应用列表',
+    schema: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          packageName: { type: 'string', description: '应用包名' },
+          appName: { type: 'string', description: '应用名称' },
+          versionName: { type: 'string', description: '版本名称' },
+          versionCode: { type: 'number', description: '版本号' },
+          isExisting: { type: 'boolean', description: '是否已存在于数据库中' },
+        },
+      },
+    },
+  })
+  async scanApps(@Query('deviceId') deviceId?: string): Promise<BaseResponseDto<Array<{
+    packageName: string;
+    appName: string;
+    versionName: string;
+    versionCode: number;
+    isExisting: boolean;
+  }>>> {
+    const apps = await this.appsService.scanApps(deviceId);
+    const message = apps.length > 0 
+      ? `扫描完成，找到 ${apps.length} 个应用` 
+      : '未找到已安装的第三方应用';
+    return BaseResponseDto.success(apps, message);
+  }
+
+  /**
+   * 批量添加应用
+   * POST /apps/batch
+   * 注意：必须在 :id 路由之前
+   */
+  @Post('batch')
+  @ApiOperation({ summary: '批量添加应用', description: '批量创建多个应用' })
+  @ApiCreatedResponse({
+    description: '批量创建结果',
+    schema: {
+      type: 'object',
+      properties: {
+        success: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              id: { type: 'string' },
+              packageName: { type: 'string' },
+              message: { type: 'string' },
+            },
+          },
+        },
+        failed: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              packageName: { type: 'string' },
+              error: { type: 'string' },
+              code: { type: 'string' },
+            },
+          },
+        },
+        total: { type: 'number' },
+        successCount: { type: 'number' },
+        failedCount: { type: 'number' },
+      },
+    },
+  })
+  async batchCreate(@Body() apps: CreateAppDto[]): Promise<BaseResponseDto<{
+    success: Array<{ id: string; packageName: string; message: string }>;
+    failed: Array<{ packageName: string; error: string; code: string }>;
+    total: number;
+    successCount: number;
+    failedCount: number;
+  }>> {
+    const result = await this.appsService.batchCreate(apps);
+    const message = `批量创建完成：成功 ${result.successCount} 个，失败 ${result.failedCount} 个`;
+    return BaseResponseDto.success(result, message);
   }
 
   /**
@@ -145,19 +257,40 @@ export class AppsController {
   }
 
   /**
-   * 查询应用的所有版本（嵌套路由）
+   * 查询应用的所有版本（嵌套路由，支持分页）
    * GET /apps/:id/versions
    */
   @Get(':id/versions')
   @ApiOperation({ summary: '查询应用的所有版本' })
   @ApiParam({ name: 'id', description: '应用ID' })
+  @ApiQuery({ name: 'page', required: false, description: '页码', example: 1 })
+  @ApiQuery({ name: 'limit', required: false, description: '每页数量', example: 20 })
   @ApiOkResponse({
-    description: '版本列表',
-    type: [AppVersionResponseDto],
+    description: '版本列表（分页）',
+    schema: {
+      type: 'object',
+      properties: {
+        items: { type: 'array', items: { $ref: '#/components/schemas/AppVersionResponseDto' } },
+        total: { type: 'number' },
+        page: { type: 'number' },
+        limit: { type: 'number' },
+        totalPages: { type: 'number' },
+      },
+    },
   })
-  async findVersions(@Param('id') appId: string): Promise<BaseResponseDto<AppVersionResponseDto[]>> {
-    const versions = await this.appVersionsService.findByAppId(appId);
-    return BaseResponseDto.success(versions);
+  async findVersions(
+    @Param('id') appId: string,
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+  ): Promise<BaseResponseDto<{
+    items: AppVersionResponseDto[];
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  }>> {
+    const result = await this.appVersionsService.findByAppId(appId, { page, limit });
+    return BaseResponseDto.success(result);
   }
 }
 

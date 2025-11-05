@@ -59,6 +59,12 @@ export function DeviceList() {
     tags: [],
   });
 
+  // 扫描相关状态
+  const [scanMode, setScanMode] = useState<'manual' | 'scan'>('manual');
+  const [scannedDevices, setScannedDevices] = useState<any[]>([]);
+  const [selectedDeviceSerial, setSelectedDeviceSerial] = useState<string>('');
+  const [isScanning, setIsScanning] = useState(false);
+
   const queryClient = useQueryClient();
 
   // 获取设备列表
@@ -99,6 +105,30 @@ export function DeviceList() {
       setSelectedDevice(null);
     },
   });
+
+  // 扫描设备
+  const scanDevicesMutation = useMutation({
+    mutationFn: () => DevicesApi.scanDevices(),
+    onSuccess: (data) => {
+      setScannedDevices(data.devices);
+      setIsScanning(false);
+    },
+    onError: () => {
+      setIsScanning(false);
+    },
+  });
+
+  // 快速添加选中设备
+  const handleQuickAdd = (device: any) => {
+    setFormData({
+      serialNumber: device.serialNumber,
+      model: device.model,
+      androidVersion: device.androidVersion,
+      type: device.type === 'EMULATOR' ? DeviceType.EMULATOR : DeviceType.REAL,
+      tags: [],
+    });
+    setScanMode('manual');
+  };
 
   /**
    * 重置表单
@@ -402,17 +432,119 @@ export function DeviceList() {
             setCreateDialogOpen(false);
             setEditDialogOpen(false);
             setSelectedDevice(null);
+            setScanMode('manual');
+            setScannedDevices([]);
+            setSelectedDeviceSerial('');
             resetForm();
           }
         }}
       >
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editDialogOpen ? '编辑设备' : '添加设备'}</DialogTitle>
             <DialogDescription>
               {editDialogOpen ? '更新设备信息' : '添加新的测试设备或模拟器'}
             </DialogDescription>
           </DialogHeader>
+
+          {/* 扫描设备按钮（仅创建模式） */}
+          {!editDialogOpen && (
+            <div className="flex items-center space-x-2 pb-4 border-b">
+              <Button
+                type="button"
+                variant={scanMode === 'scan' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => {
+                  setScanMode('scan');
+                  setIsScanning(true);
+                  scanDevicesMutation.mutate();
+                }}
+                disabled={isScanning}
+              >
+                <RefreshCw className={`h-4 w-4 mr-2 ${isScanning ? 'animate-spin' : ''}`} />
+                {isScanning ? '扫描中...' : '扫描设备'}
+              </Button>
+              <Button
+                type="button"
+                variant={scanMode === 'manual' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setScanMode('manual')}
+              >
+                ✏️ 手动添加
+              </Button>
+            </div>
+          )}
+
+          {/* 扫描结果显示 */}
+          {!editDialogOpen && scanMode === 'scan' && scannedDevices.length > 0 && (
+            <div className="space-y-2">
+              <Label>检测到 {scannedDevices.length} 台设备</Label>
+              <div className="max-h-64 overflow-y-auto space-y-2">
+                {scannedDevices.map((device) => (
+                  <div
+                    key={device.serialNumber}
+                    className={`p-3 border rounded-md cursor-pointer transition-colors ${
+                      device.isExisting
+                        ? 'bg-muted opacity-50 cursor-not-allowed'
+                        : 'hover:bg-accent'
+                    }`}
+                    onClick={() => !device.isExisting && handleQuickAdd(device)}
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="space-y-1">
+                        <div className="flex items-center space-x-2">
+                          <span className="font-mono text-sm font-medium">{device.serialNumber}</span>
+                          {device.type === 'EMULATOR' && (
+                            <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">
+                              模拟器
+                            </span>
+                          )}
+                          {device.isExisting && (
+                            <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">
+                              已添加
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          {device.model} • Android {device.androidVersion}
+                          {device.resolution && ` • ${device.resolution}`}
+                        </p>
+                      </div>
+                      {!device.isExisting && (
+                        <Button size="sm" variant="ghost" onClick={() => handleQuickAdd(device)}>
+                          选择
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                💡 提示：点击设备快速填充表单，或切换到"手动添加"模式
+              </p>
+            </div>
+          )}
+
+          {/* 无设备提示 */}
+          {!editDialogOpen && scanMode === 'scan' && !isScanning && scannedDevices.length === 0 && (
+            <div className="py-8 text-center text-muted-foreground">
+              <Smartphone className="h-12 w-12 mx-auto mb-3 opacity-20" />
+              <p className="text-sm">未检测到连接的设备</p>
+              <p className="text-xs mt-2">请确保设备已通过USB连接并开启USB调试</p>
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-4"
+                onClick={() => {
+                  setIsScanning(true);
+                  scanDevicesMutation.mutate();
+                }}
+              >
+                <RefreshCw className="h-4 w-4 mr-2" />
+                重新扫描
+              </Button>
+            </div>
+          )}
 
           <div className="space-y-4">
             <div className="space-y-2">

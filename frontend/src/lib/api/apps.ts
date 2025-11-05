@@ -40,6 +40,32 @@ export class AppsApi {
   static async deleteApp(id: string): Promise<void> {
     return ApiClient.delete(`/apps/${id}`);
   }
+
+  /**
+   * 扫描设备上的应用
+   */
+  static async scanApps(deviceId?: string): Promise<Array<{
+    packageName: string;
+    appName: string;
+    versionName: string;
+    versionCode: number;
+    isExisting: boolean;
+  }>> {
+    return ApiClient.get('/apps/scan', { params: deviceId ? { deviceId } : undefined });
+  }
+
+  /**
+   * 批量创建应用
+   */
+  static async batchCreateApps(apps: CreateAppDto[]): Promise<{
+    success: Array<{ id: string; packageName: string; message: string }>;
+    failed: Array<{ packageName: string; error: string; code: string }>;
+    total: number;
+    successCount: number;
+    failedCount: number;
+  }> {
+    return ApiClient.post('/apps/batch', apps);
+  }
 }
 
 /**

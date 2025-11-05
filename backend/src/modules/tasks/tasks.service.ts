@@ -151,9 +151,19 @@ export class TasksService {
   async findAll(params?: {
     status?: TaskStatus;
     appVersionId?: string;
+    page?: number;
     limit?: number;
-    offset?: number;
-  }): Promise<{ tasks: TaskResponseDto[]; total: number }> {
+  }): Promise<{
+    items: TaskResponseDto[];
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  }> {
+    const page = params?.page || 1;
+    const limit = params?.limit || 20;
+    const skip = (page - 1) * limit;
+
     const where: any = {};
 
     if (params?.status) {
@@ -178,15 +188,20 @@ export class TasksService {
           },
         },
         orderBy: [{ priority: 'desc' }, { createdAt: 'desc' }],
-        take: params?.limit || 20,
-        skip: params?.offset || 0,
+        take: limit,
+        skip,
       }),
       this.prisma.task.count({ where }),
     ]);
 
+    const totalPages = Math.ceil(total / limit);
+
     return {
-      tasks: tasks.map((task) => new TaskResponseDto(task)),
+      items: tasks.map((task) => new TaskResponseDto(task)),
       total,
+      page,
+      limit,
+      totalPages,
     };
   }
 
@@ -382,6 +397,36 @@ export class TasksService {
     });
 
     return tasks.map((task) => new TaskResponseDto(task));
+  }
+
+  /**
+   * 获取任务统计信息
+   */
+  async getStats(): Promise<{
+    total: number;
+    running: number;
+    queued: number;
+    succeeded: number;
+    failed: number;
+    cancelled: number;
+  }> {
+    const [total, running, queued, succeeded, failed, cancelled] = await Promise.all([
+      this.prisma.task.count(),
+      this.prisma.task.count({ where: { status: TaskStatus.RUNNING } }),
+      this.prisma.task.count({ where: { status: TaskStatus.QUEUED } }),
+      this.prisma.task.count({ where: { status: TaskStatus.COMPLETED } }),
+      this.prisma.task.count({ where: { status: TaskStatus.FAILED } }),
+      this.prisma.task.count({ where: { status: TaskStatus.CANCELLED } }),
+    ]);
+
+    return {
+      total,
+      running,
+      queued,
+      succeeded,
+      failed,
+      cancelled,
+    };
   }
 }
 
