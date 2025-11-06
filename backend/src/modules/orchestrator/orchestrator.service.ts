@@ -132,15 +132,30 @@ export class OrchestratorService implements OnModuleInit {
    * 为任务分配设备并开始执行
    */
   private async assignAndExecuteTask(taskId: string): Promise<void> {
-    // 查找可用设备
+    // 获取任务信息，包括指定的设备列表
+    const task = await this.prisma.task.findUnique({
+      where: { id: taskId },
+    });
+
+    if (!task) {
+      this.logger.error(`Task ${taskId} not found`);
+      return;
+    }
+
+    // 从 coverageConfig 中提取指定的设备列表
+    const config = task.coverageConfig as any;
+    const targetDeviceIds = Array.isArray(config?.deviceIds) ? config.deviceIds : [];
+
+    // 查找可用设备：优先使用任务指定的设备
     const availableDevice = await this.prisma.device.findFirst({
       where: {
         status: DeviceStatus.AVAILABLE,
+        ...(targetDeviceIds.length > 0 && { id: { in: targetDeviceIds } }),
       },
     });
 
     if (!availableDevice) {
-      this.logger.warn(`No available device for task ${taskId}`);
+      this.logger.warn(`No available device for task ${taskId}${targetDeviceIds.length > 0 ? ` (target devices: ${targetDeviceIds.join(', ')})` : ''}`);
       return;
     }
 
