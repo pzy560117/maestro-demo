@@ -3,14 +3,14 @@ import { remote, RemoteOptions } from 'webdriverio';
 
 /**
  * Appium 真实集成服务
- * 
+ *
  * 职责：
  * 1. 连接 Android 设备
  * 2. 安装和启动应用
  * 3. 执行 UI 操作
  * 4. 获取截图和 DOM
  * 5. 元素定位和验证
- * 
+ *
  * 依赖：
  * - webdriverio: WebDriver 客户端
  * - Appium Server: 需要单独启动（http://localhost:4723）
@@ -23,7 +23,8 @@ export class AppiumRealService implements OnModuleInit {
   private sessions: Map<string, WebdriverIO.Browser> = new Map();
 
   constructor() {
-    this.enabled = process.env.APPIUM_ENABLED === 'true';
+    // 默认启用，除非明确设置为 false
+    this.enabled = process.env.APPIUM_ENABLED !== 'false';
     this.appiumServerUrl = process.env.APPIUM_SERVER_URL || 'http://localhost:4723';
   }
 
@@ -53,8 +54,66 @@ export class AppiumRealService implements OnModuleInit {
   }
 
   /**
+   * 通过 ADB 检测应用的主 Activity
+   * @param deviceSerial - 设备序列号
+   * @param appPackage - 应用包名
+   * @returns 主 Activity 名称
+   */
+  private async detectMainActivity(deviceSerial: string, appPackage: string): Promise<string> {
+    try {
+      const { exec } = await import('child_process');
+      const { promisify } = await import('util');
+      const execAsync = promisify(exec);
+
+      // Windows 下使用 PowerShell 执行 ADB 命令
+      const isWindows = process.platform === 'win32';
+      let command: string;
+
+      if (isWindows) {
+        // Windows: 使用 PowerShell 包装，避免 shell 转义问题
+        command = `powershell -Command "adb -s ${deviceSerial} shell \\"dumpsys package ${appPackage}\\" | Select-String -Pattern 'android.intent.action.MAIN' -Context 0,5"`;
+      } else {
+        // Linux/Mac: 直接使用 shell
+        command = `adb -s ${deviceSerial} shell "dumpsys package ${appPackage} | grep -A 5 'android.intent.action.MAIN'"`;
+      }
+
+      this.logger.debug(`Detecting main activity with command: ${command.substring(0, 100)}...`);
+      const { stdout, stderr } = await execAsync(command, { timeout: 10000 });
+
+      if (stderr) {
+        this.logger.warn(`ADB stderr: ${stderr}`);
+      }
+
+      // 解析输出，查找 Activity 类名
+      // 格式示例: 9203d28 com.macrovideo.v380pro/.activities.LaunchActivityAMPSDomestic filter 95dd3ea
+      const activityPattern = new RegExp(`${appPackage.replace(/\./g, '\\.')}\\/([^\\s]+)`);
+      const activityMatch = stdout.match(activityPattern);
+
+      if (activityMatch && activityMatch[1]) {
+        const activity = activityMatch[1];
+        this.logger.log(`✅ Detected main activity for ${appPackage}: ${activity}`);
+        return activity;
+      }
+
+      // 如果检测失败，回退到通用的 MainActivity
+      this.logger.warn(
+        `Could not detect main activity for ${appPackage}, falling back to .MainActivity`,
+      );
+      this.logger.debug(`ADB output: ${stdout.substring(0, 200)}`);
+      return '.MainActivity';
+    } catch (error) {
+      this.logger.error(
+        `Failed to detect main activity: ${(error as Error).message}`,
+        (error as Error).stack,
+      );
+      // 回退方案
+      return '.MainActivity';
+    }
+  }
+
+  /**
    * 创建会话（连接设备）
-   * 
+   *
    * @param deviceSerial - 设备序列号
    * @param appPackage - 应用包名
    * @param appActivity - 应用入口 Activity（可选）
@@ -70,16 +129,40 @@ export class AppiumRealService implements OnModuleInit {
     }
 
     try {
+      // 如果未提供 Activity，尝试自动检测主 Activity
+      let finalActivity = appActivity;
+
+      if (!finalActivity) {
+        this.logger.debug(
+          `No activity provided for ${appPackage}, attempting to detect main activity`,
+        );
+        finalActivity = await this.detectMainActivity(deviceSerial, appPackage);
+      }
+
       const capabilities: RemoteOptions['capabilities'] = {
         platformName: 'Android',
         'appium:deviceName': deviceSerial,
         'appium:udid': deviceSerial,
         'appium:appPackage': appPackage,
-        'appium:appActivity': appActivity || `${appPackage}.MainActivity`,
+        'appium:appActivity': finalActivity,
         'appium:automationName': 'UiAutomator2',
         'appium:noReset': true,
         'appium:fullReset': false,
         'appium:newCommandTimeout': 300, // 5 minutes
+        'appium:ensureWebviewsHavePages': true,
+        'appium:nativeWebScreenshot': true,
+        // 优化启动性能
+        'appium:skipDeviceInitialization': false,
+        'appium:skipServerInstallation': false,
+        'appium:skipUnlock': true, // 跳过解锁（假设设备已解锁）
+        'appium:autoGrantPermissions': true, // 自动授予权限
+        'appium:disableWindowAnimation': true, // 禁用动画加速
+        // 增加等待时间
+        'appium:deviceReadyTimeout': 120000, // 允许 Appium 等待设备上线 120 秒
+        'appium:androidInstallTimeout': 90000, // APK 安装超时 90秒
+        'appium:adbExecTimeout': 120000, // ADB 命令超时 120秒
+        'appium:uiautomator2ServerLaunchTimeout': 120000, // UiAutomator2 启动超时
+        'appium:uiautomator2ServerInstallTimeout': 120000, // UiAutomator2 安装超时
       };
 
       const driver = await remote({
@@ -88,6 +171,11 @@ export class AppiumRealService implements OnModuleInit {
         port: Number(new URL(this.appiumServerUrl).port) || 4723,
         path: '/',
         capabilities,
+        // 增加连接超时时间（默认 120秒 → 180秒）
+        connectionRetryTimeout: 180000, // 3 分钟
+        connectionRetryCount: 3,
+        // 增加会话创建超时
+        waitforTimeout: 60000, // 60秒
       });
 
       const sessionId = driver.sessionId;
@@ -180,10 +268,10 @@ export class AppiumRealService implements OnModuleInit {
 
     try {
       const source = await driver.getPageSource();
-      
+
       // 将 XML 转换为 JSON 格式
       const domData = this.parseXmlToJson(source);
-      
+
       this.logger.log('Page source retrieved');
       return domData;
     } catch (error) {
@@ -203,7 +291,7 @@ export class AppiumRealService implements OnModuleInit {
       const selector = this.buildSelector(strategy, locator);
       const element = await driver.$(selector);
       await element.click();
-      
+
       this.logger.log(`Clicked element: ${strategy} = ${locator}`);
       return true;
     } catch (error) {
@@ -216,14 +304,19 @@ export class AppiumRealService implements OnModuleInit {
   /**
    * 输入文本
    */
-  async input(sessionId: string, locator: string, strategy: string, text: string): Promise<boolean> {
+  async input(
+    sessionId: string,
+    locator: string,
+    strategy: string,
+    text: string,
+  ): Promise<boolean> {
     const driver = this.getDriver(sessionId);
 
     try {
       const selector = this.buildSelector(strategy, locator);
       const element = await driver.$(selector);
       await element.setValue(text);
-      
+
       this.logger.log(`Input text: ${text} to ${strategy} = ${locator}`);
       return true;
     } catch (error) {
@@ -242,7 +335,7 @@ export class AppiumRealService implements OnModuleInit {
     try {
       // 获取屏幕尺寸
       const { width, height } = await driver.getWindowSize();
-      
+
       let startX = width / 2;
       let startY = height / 2;
       let endX = startX;
@@ -275,7 +368,7 @@ export class AppiumRealService implements OnModuleInit {
         { action: 'moveTo', options: { x: endX, y: endY } },
         { action: 'release' },
       ]);
-      
+
       this.logger.log(`Scrolled: ${direction}`);
       return true;
     } catch (error) {
@@ -311,13 +404,13 @@ export class AppiumRealService implements OnModuleInit {
     try {
       const selector = this.buildSelector(strategy, locator);
       const element = await driver.$(selector);
-      
+
       // 通过改变元素边框来高亮
       await driver.execute('mobile: shell', {
         command: 'input',
         args: ['keyevent', 'KEYCODE_MENU'], // 临时方案
       });
-      
+
       this.logger.log(`Highlighted element: ${strategy} = ${locator}`);
       return true;
     } catch (error) {
@@ -401,4 +494,3 @@ export class AppiumRealService implements OnModuleInit {
     return Array.from(this.sessions.keys());
   }
 }
-

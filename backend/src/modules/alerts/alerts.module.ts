@@ -16,4 +16,3 @@ import { PrismaModule } from '../common/prisma/prisma.module';
   exports: [AlertsService],
 })
 export class AlertsModule {}
-

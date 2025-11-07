@@ -17,4 +17,3 @@ export class UpdateDeviceDto extends PartialType(CreateDeviceDto) {
   @IsEnum(DeviceStatus, { message: '设备状态不合法' })
   status?: DeviceStatus;
 }
-

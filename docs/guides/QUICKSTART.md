@@ -34,8 +34,8 @@ npm run dev
 
 ### 4. 访问应用
 - **前端**: http://localhost:5173
-- **API文档**: http://localhost:3000/api/docs
-- **健康检查**: http://localhost:3000/api/v1/health
+- **API文档**: http://localhost:8360/api/docs
+- **健康检查**: http://localhost:8360/api/v1/health
 
 ---
 
@@ -79,7 +79,7 @@ REDIS_URL="redis://localhost:6379"
 DASHSCOPE_API_KEY="your-api-key"  # 可选
 
 # frontend/.env
-VITE_API_URL="http://localhost:3000"
+VITE_API_URL="http://localhost:8360"
 ```
 
 ### Step 4: 安装依赖
@@ -126,7 +126,7 @@ npm run dev
 
 ### 1. 检查后端
 ```bash
-curl http://localhost:3000/api/v1/health
+curl http://localhost:8360/api/v1/health
 # 期望: {"status":"ok","timestamp":"..."}
 ```
 
@@ -142,7 +142,7 @@ docker exec -it maestro-postgres psql -U maestro
 ```
 
 ### 4. 检查API文档
-访问: http://localhost:3000/api/docs
+访问: http://localhost:8360/api/docs
 应该看到完整的Swagger文档
 
 ---
@@ -288,7 +288,7 @@ docker logs maestro-redis
 ## 🆘 获取帮助
 
 - **文档中心**: [docs/README.md](../README.md)
-- **API文档**: http://localhost:3000/api/docs
+- **API文档**: http://localhost:8360/api/docs
 - **Issues**: GitHub Issues
 - **Wiki**: 项目Wiki
 

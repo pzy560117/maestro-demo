@@ -10,7 +10,7 @@ import { IntegrationsController } from './integrations.controller';
 /**
  * 第三方集成模块
  * 包含 MidSceneJS、Appium 和 MinIO 集成
- * 
+ *
  * 说明：
  * - Mock 服务：用于开发测试（默认）
  * - Real 服务：真实 API 集成（通过环境变量启用）
@@ -22,7 +22,7 @@ import { IntegrationsController } from './integrations.controller';
     // Mock 服务（默认）
     MidSceneService,
     AppiumService,
-    
+
     // 真实服务
     MidSceneRealService,
     MidSceneDashScopeService,
@@ -39,4 +39,3 @@ import { IntegrationsController } from './integrations.controller';
   ],
 })
 export class IntegrationsModule {}
-

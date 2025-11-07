@@ -11,4 +11,3 @@ import { EventsGateway } from './websocket.gateway';
   exports: [EventsGateway],
 })
 export class WebSocketModule {}
-

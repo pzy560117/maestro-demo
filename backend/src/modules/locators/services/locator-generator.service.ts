@@ -17,13 +17,13 @@ export interface LocatorCandidate {
 /**
  * 定位生成服务
  * 功能 E：视觉解析与定位融合（FR-06/07）
- * 
+ *
  * 职责：
  * 1. 基于 DOM 生成定位候选
  * 2. 基于视觉特征生成定位候选
  * 3. 融合多种策略并计算置信度
  * 4. 标记动态属性
- * 
+ *
  * 验收标准：
  * 1. 无 resourceId 的元素提供文本+视觉组合定位
  * 2. 动态属性（时间、UUID）被识别并标记 dynamic_flags
@@ -38,7 +38,7 @@ export class LocatorGeneratorService {
 
   /**
    * 为元素生成定位候选
-   * 
+   *
    * @param elementId - 元素 ID
    * @param elementData - 元素数据（从 DOM 提取）
    * @param visionData - 视觉数据（从 MidSceneJS 提取）
@@ -59,6 +59,9 @@ export class LocatorGeneratorService {
       text?: string;
       bbox?: { x: number; y: number; width: number; height: number };
       confidence?: number;
+      overlapScore?: number;
+      provider?: string;
+      textMatched?: boolean;
     },
     historicalData?: any[],
   ): Promise<LocatorCandidate[]> {
@@ -160,11 +163,17 @@ export class LocatorGeneratorService {
    * 基于视觉特征生成定位候选
    */
   private generateVisionBasedCandidates(
-    elementData: { textValue?: string | null },
+    elementData: {
+      textValue?: string | null;
+      contentDesc?: string | null;
+    },
     visionData: {
       text?: string;
       bbox?: { x: number; y: number; width: number; height: number };
       confidence?: number;
+      overlapScore?: number;
+      provider?: string;
+      textMatched?: boolean;
     },
   ): LocatorCandidate[] {
     const candidates: LocatorCandidate[] = [];
@@ -172,17 +181,27 @@ export class LocatorGeneratorService {
     // 如果视觉识别出文本且与 DOM 文本一致，提高置信度
     if (visionData.text && visionData.text.trim()) {
       const visionText = visionData.text.trim();
-      const isConsistent = elementData.textValue?.includes(visionText) || visionText.includes(elementData.textValue || '');
-      
+      const elementText = elementData.textValue || elementData.contentDesc || '';
+      const normalizedElementText = elementText.trim();
+      const isConsistent =
+        normalizedElementText.length > 0 &&
+        (normalizedElementText.includes(visionText) || visionText.includes(normalizedElementText));
+
       candidates.push({
         strategy: LocatorStrategy.TEXT,
         locatorValue: visionText,
-        score: isConsistent ? 0.9 : 0.75,
+        score: this.calculateVisionTextScore(
+          visionData.confidence,
+          visionData.overlapScore,
+          isConsistent || visionData.textMatched,
+        ),
         source: LocatorSource.VISION,
         isPrimary: false,
         dynamicFlags: {
           visionConfidence: visionData.confidence || 0,
-          isConsistent,
+          overlapScore: visionData.overlapScore || 0,
+          provider: visionData.provider || 'dashscope',
+          textMatched: isConsistent || visionData.textMatched || false,
         },
       });
     }
@@ -192,17 +211,40 @@ export class LocatorGeneratorService {
       candidates.push({
         strategy: LocatorStrategy.IMAGE_TEMPLATE,
         locatorValue: JSON.stringify(visionData.bbox),
-        score: 0.7,
+        score: this.calculateTemplateScore(visionData.confidence, visionData.overlapScore),
         source: LocatorSource.VISION,
         isPrimary: false,
         dynamicFlags: {
           bbox: visionData.bbox,
           visionConfidence: visionData.confidence || 0,
+          overlapScore: visionData.overlapScore || 0,
+          provider: visionData.provider || 'dashscope',
         },
       });
     }
 
     return candidates;
+  }
+
+  private calculateVisionTextScore(
+    confidence?: number,
+    overlapScore?: number,
+    textMatched?: boolean,
+  ): number {
+    const base = 0.65;
+    const confBonus = confidence ? Math.min(0.15, confidence * 0.15) : 0;
+    const overlapBonus = overlapScore ? Math.min(0.15, overlapScore * 0.5) : 0;
+    const textBonus = textMatched ? 0.1 : 0;
+
+    return Math.min(0.95, base + confBonus + overlapBonus + textBonus);
+  }
+
+  private calculateTemplateScore(confidence?: number, overlapScore?: number): number {
+    const base = 0.6;
+    const confBonus = confidence ? Math.min(0.1, confidence * 0.1) : 0;
+    const overlapBonus = overlapScore ? Math.min(0.15, overlapScore * 0.5) : 0;
+
+    return Math.min(0.85, base + confBonus + overlapBonus);
   }
 
   /**
@@ -286,4 +328,3 @@ export class LocatorGeneratorService {
     this.logger.log(`Saved ${candidates.length} locator candidates for element ${elementId}`);
   }
 }
-

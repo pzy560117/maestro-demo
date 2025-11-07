@@ -1,17 +1,5 @@
-import {
-  Controller,
-  Get,
-  Post,
-  Param,
-  ParseUUIDPipe,
-  HttpStatus,
-} from '@nestjs/common';
-import {
-  ApiTags,
-  ApiOperation,
-  ApiResponse,
-  ApiParam,
-} from '@nestjs/swagger';
+import { Controller, Get, Post, Param, ParseUUIDPipe, HttpStatus } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse, ApiParam } from '@nestjs/swagger';
 import { OrchestratorService } from './orchestrator.service';
 import { TaskRunService } from './services/task-run.service';
 
@@ -125,9 +113,7 @@ export class OrchestratorController {
     status: HttpStatus.OK,
     description: '任务运行详情',
   })
-  async getTaskRun(
-    @Param('taskRunId', ParseUUIDPipe) taskRunId: string,
-  ): Promise<any> {
+  async getTaskRun(@Param('taskRunId', ParseUUIDPipe) taskRunId: string): Promise<any> {
     return this.taskRunService.getTaskRun(taskRunId);
   }
 
@@ -148,10 +134,39 @@ export class OrchestratorController {
     status: HttpStatus.OK,
     description: '任务运行记录列表',
   })
-  async getTaskRuns(
-    @Param('taskId', ParseUUIDPipe) taskId: string,
-  ): Promise<any[]> {
+  async getTaskRuns(@Param('taskId', ParseUUIDPipe) taskId: string): Promise<any[]> {
     return this.taskRunService.getTaskRunsByTask(taskId);
   }
-}
 
+  /**
+   * 健康检查：扫描并修复卡住的任务
+   */
+  @Post('health/fix-stuck-tasks')
+  @ApiOperation({
+    summary: '扫描并修复卡住的任务',
+    description: '定期扫描RUNNING状态超过阈值且无事件更新的任务，自动标记为FAILED并释放设备',
+  })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: '修复结果',
+    schema: {
+      type: 'object',
+      properties: {
+        scanned: { type: 'number', description: '扫描的任务数' },
+        fixed: { type: 'number', description: '修复的任务数' },
+        taskRunIds: {
+          type: 'array',
+          items: { type: 'string' },
+          description: '修复的任务运行ID列表',
+        },
+      },
+    },
+  })
+  async fixStuckTasks(): Promise<{
+    scanned: number;
+    fixed: number;
+    taskRunIds: string[];
+  }> {
+    return this.orchestratorService.fixStuckTasks();
+  }
+}

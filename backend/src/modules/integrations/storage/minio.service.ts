@@ -4,13 +4,13 @@ import * as crypto from 'crypto';
 
 /**
  * MinIO 对象存储服务
- * 
+ *
  * 职责：
  * 1. 管理对象存储连接
  * 2. 上传/下载文件
  * 3. 生成预签名 URL
  * 4. 管理存储桶
- * 
+ *
  * 存储结构：
  * - maestro-screenshots/ - 截图文件
  * - maestro-thumbnails/ - 缩略图文件
@@ -95,7 +95,7 @@ export class MinioService implements OnModuleInit {
 
   /**
    * 上传截图
-   * 
+   *
    * @param buffer - 文件内容
    * @param appVersionId - 应用版本 ID
    * @param metadata - 元数据
@@ -115,16 +115,10 @@ export class MinioService implements OnModuleInit {
     const objectName = `${yearMonth}/screen_${hash}.webp`;
 
     try {
-      await this.client.putObject(
-        this.buckets.screenshots,
-        objectName,
-        buffer,
-        buffer.length,
-        {
-          'Content-Type': 'image/webp',
-          ...metadata,
-        },
-      );
+      await this.client.putObject(this.buckets.screenshots, objectName, buffer, buffer.length, {
+        'Content-Type': 'image/webp',
+        ...metadata,
+      });
 
       this.logger.log(`Screenshot uploaded: ${objectName}`);
 
@@ -153,16 +147,10 @@ export class MinioService implements OnModuleInit {
     const objectName = `${yearMonth}/thumb_${hash}.webp`;
 
     try {
-      await this.client.putObject(
-        this.buckets.thumbnails,
-        objectName,
-        buffer,
-        buffer.length,
-        {
-          'Content-Type': 'image/webp',
-          ...metadata,
-        },
-      );
+      await this.client.putObject(this.buckets.thumbnails, objectName, buffer, buffer.length, {
+        'Content-Type': 'image/webp',
+        ...metadata,
+      });
 
       this.logger.log(`Thumbnail uploaded: ${objectName}`);
 
@@ -193,16 +181,10 @@ export class MinioService implements OnModuleInit {
     const objectName = `${yearMonth}/dom_${hash}.json`;
 
     try {
-      await this.client.putObject(
-        this.buckets.dom,
-        objectName,
-        buffer,
-        buffer.length,
-        {
-          'Content-Type': 'application/json',
-          ...metadata,
-        },
-      );
+      await this.client.putObject(this.buckets.dom, objectName, buffer, buffer.length, {
+        'Content-Type': 'application/json',
+        ...metadata,
+      });
 
       this.logger.log(`DOM uploaded: ${objectName}`);
 
@@ -216,7 +198,7 @@ export class MinioService implements OnModuleInit {
 
   /**
    * 下载文件
-   * 
+   *
    * @param objectPath - 对象路径（包含 bucket 名称）
    * @returns 文件内容
    */
@@ -246,7 +228,7 @@ export class MinioService implements OnModuleInit {
 
   /**
    * 生成预签名 URL（用于临时访问）
-   * 
+   *
    * @param objectPath - 对象路径
    * @param expirySeconds - 过期时间（秒）
    * @returns 预签名 URL
@@ -387,4 +369,3 @@ export class MinioService implements OnModuleInit {
     return { buckets: stats };
   }
 }
-

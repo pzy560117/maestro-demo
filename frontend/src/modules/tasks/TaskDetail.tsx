@@ -29,6 +29,7 @@ import { format } from 'date-fns';
 import { zhCN } from 'date-fns/locale';
 import { formatDistanceToNow } from 'date-fns';
 import { useWebSocket } from '@/lib/hooks/useWebSocket';
+import { TaskRunLogs } from '@/components/TaskRunLogs';
 
 /**
  * 任务详情页面
@@ -158,7 +159,7 @@ export function TaskDetail() {
     switch (strategy) {
       case CoverageStrategy.FULL:
         return '全量遍历';
-      case CoverageStrategy.CORE:
+      case CoverageStrategy.SMOKE:
         return '核心路径';
       case CoverageStrategy.CUSTOM:
         return '自定义';
@@ -185,7 +186,7 @@ export function TaskDetail() {
 
         {/* 操作按钮 */}
         <div className="flex space-x-2">
-          {task.status === TaskStatus.RUNNING && (
+          {(task.status === TaskStatus.QUEUED || task.status === TaskStatus.RUNNING) && (
             <Button
               variant="destructive"
               onClick={() => cancelMutation.mutate()}
@@ -234,7 +235,7 @@ export function TaskDetail() {
             <CheckCircle className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-lg font-medium">{getCoverageText(task.coverageStrategy)}</div>
+            <div className="text-lg font-medium">{getCoverageText(task.coverageProfile)}</div>
           </CardContent>
         </Card>
 
@@ -438,6 +439,19 @@ export function TaskDetail() {
                 ))}
               </TableBody>
             </Table>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* 实时运行日志 */}
+      {taskRuns && taskRuns.length > 0 && (
+        <Card className="bento-card">
+          <CardHeader>
+            <CardTitle>实时运行日志</CardTitle>
+            <CardDescription>任务执行过程的详细事件记录（2秒自动刷新）</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <TaskRunLogs taskRunId={taskRuns[0].id} />
           </CardContent>
         </Card>
       )}

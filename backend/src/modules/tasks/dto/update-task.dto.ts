@@ -1,5 +1,14 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsString, IsEnum, IsInt, Min, Max, IsOptional, IsObject, MaxLength } from 'class-validator';
+import {
+  IsString,
+  IsEnum,
+  IsInt,
+  Min,
+  Max,
+  IsOptional,
+  IsObject,
+  MaxLength,
+} from 'class-validator';
 import { TaskStatus, CoverageProfile } from '@prisma/client';
 
 /**
@@ -57,4 +66,3 @@ export class UpdateTaskDto {
   @IsOptional()
   scheduleAt?: Date;
 }
-

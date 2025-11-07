@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { BusinessException } from '../common/exceptions/business.exception';
 import { EventsGateway } from '../websocket/websocket.gateway';
@@ -6,11 +6,12 @@ import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
 import { TaskResponseDto } from './dto/task-response.dto';
 import { TaskStatus, DeviceStatus } from '@prisma/client';
+import { OrchestratorService } from '../orchestrator/orchestrator.service';
 
 /**
  * 任务管理服务
  * 实现功能 B：遍历任务创建与管理（FR-01）
- * 
+ *
  * 验收标准：
  * 1. 未选择设备提交时，提示"请选择至少一台设备"（DTO层校验）
  * 2. 同一个设备若已有运行任务，提示"设备正忙"
@@ -24,11 +25,13 @@ export class TasksService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly wsGateway: EventsGateway,
+    @Inject(forwardRef(() => OrchestratorService))
+    private readonly orchestratorService: OrchestratorService,
   ) {}
 
   /**
    * 创建遍历任务
-   * 
+   *
    * 业务逻辑：
    * 1. 验证应用版本存在
    * 2. 验证所有设备存在且状态为 AVAILABLE
@@ -61,20 +64,14 @@ export class TasksService {
     if (devices.length !== deviceIds.length) {
       const foundIds = devices.map((d) => d.id);
       const missingIds = deviceIds.filter((id) => !foundIds.includes(id));
-      throw BusinessException.badRequest(
-        `设备不存在：${missingIds.join(', ')}`,
-      );
+      throw BusinessException.badRequest(`设备不存在：${missingIds.join(', ')}`);
     }
 
     // 3. 检查设备可用性
-    const unavailableDevices = devices.filter(
-      (d) => d.status !== DeviceStatus.AVAILABLE,
-    );
+    const unavailableDevices = devices.filter((d) => d.status !== DeviceStatus.AVAILABLE);
 
     if (unavailableDevices.length > 0) {
-      const unavailableList = unavailableDevices
-        .map((d) => `${d.serial} (${d.status})`)
-        .join(', ');
+      const unavailableList = unavailableDevices.map((d) => `${d.serial} (${d.status})`).join(', ');
       throw BusinessException.badRequest(`设备不可用：${unavailableList}`);
     }
 
@@ -113,7 +110,10 @@ export class TasksService {
         name: createTaskDto.name,
         appVersionId: createTaskDto.appVersionId,
         coverageProfile: createTaskDto.coverageProfile,
-        coverageConfig: (createTaskDto.coverageConfig || {}) as any,
+        coverageConfig: {
+          ...(createTaskDto.coverageConfig || {}),
+          deviceIds, // 存储设备ID列表到 coverageConfig
+        } as any,
         priority: createTaskDto.priority || 3,
         status: TaskStatus.QUEUED,
         createdBy: createTaskDto.createdBy || null,
@@ -128,9 +128,7 @@ export class TasksService {
       },
     });
 
-    this.logger.log(
-      `Task created: ${task.id} (${task.name}), devices: ${deviceIds.join(', ')}`,
-    );
+    this.logger.log(`Task created: ${task.id} (${task.name}), devices: ${deviceIds.join(', ')}`);
 
     // 推送 WebSocket 任务创建事件
     this.wsGateway.emitTaskUpdate(task.id, task.status, {
@@ -245,13 +243,8 @@ export class TasksService {
     }
 
     // 限制：仅允许更新未执行的任务
-    if (
-      existingTask.status !== TaskStatus.DRAFT &&
-      existingTask.status !== TaskStatus.QUEUED
-    ) {
-      throw BusinessException.badRequest(
-        `任务状态为 ${existingTask.status}，不允许修改`,
-      );
+    if (existingTask.status !== TaskStatus.DRAFT && existingTask.status !== TaskStatus.QUEUED) {
+      throw BusinessException.badRequest(`任务状态为 ${existingTask.status}，不允许修改`);
     }
 
     const task = await this.prisma.task.update({
@@ -259,9 +252,10 @@ export class TasksService {
       data: {
         name: updateTaskDto.name,
         coverageProfile: updateTaskDto.coverageProfile,
-        coverageConfig: updateTaskDto.coverageConfig !== undefined
-          ? (updateTaskDto.coverageConfig as any)
-          : undefined,
+        coverageConfig:
+          updateTaskDto.coverageConfig !== undefined
+            ? (updateTaskDto.coverageConfig as any)
+            : undefined,
         priority: updateTaskDto.priority,
         status: updateTaskDto.status,
         scheduleAt: updateTaskDto.scheduleAt,
@@ -301,13 +295,8 @@ export class TasksService {
     }
 
     // 限制：不允许删除进行中的任务
-    if (
-      task.status === TaskStatus.RUNNING ||
-      task.status === TaskStatus.QUEUED
-    ) {
-      throw BusinessException.badRequest(
-        `任务状态为 ${task.status}，不允许删除`,
-      );
+    if (task.status === TaskStatus.RUNNING || task.status === TaskStatus.QUEUED) {
+      throw BusinessException.badRequest(`任务状态为 ${task.status}，不允许删除`);
     }
 
     await this.prisma.task.delete({
@@ -337,13 +326,8 @@ export class TasksService {
       throw BusinessException.notFound('任务', id);
     }
 
-    if (
-      task.status !== TaskStatus.QUEUED &&
-      task.status !== TaskStatus.RUNNING
-    ) {
-      throw BusinessException.badRequest(
-        `任务状态为 ${task.status}，无法取消`,
-      );
+    if (task.status !== TaskStatus.QUEUED && task.status !== TaskStatus.RUNNING) {
+      throw BusinessException.badRequest(`任务状态为 ${task.status}，无法取消`);
     }
 
     // 更新任务状态为 CANCELLED（用户主动取消）
@@ -373,6 +357,68 @@ export class TasksService {
   }
 
   /**
+   * 重试任务
+   * 将失败或取消的任务重新加入队列
+   */
+  async retry(id: string): Promise<TaskResponseDto> {
+    const task = await this.prisma.task.findUnique({
+      where: { id },
+      include: {
+        appVersion: {
+          include: {
+            app: true,
+          },
+        },
+      },
+    });
+
+    if (!task) {
+      throw BusinessException.notFound('任务', id);
+    }
+
+    // 只允许重试失败、取消或完成的任务
+    const retryableStatuses: TaskStatus[] = [
+      TaskStatus.FAILED,
+      TaskStatus.CANCELLED,
+      TaskStatus.COMPLETED,
+    ];
+
+    if (!retryableStatuses.includes(task.status)) {
+      throw BusinessException.badRequest(`任务状态为 ${task.status}，不允许重试`);
+    }
+
+    // 更新任务状态为排队
+    const updatedTask = await this.prisma.task.update({
+      where: { id },
+      data: {
+        status: TaskStatus.QUEUED,
+        updatedAt: new Date(),
+      },
+      include: {
+        appVersion: {
+          include: {
+            app: true,
+          },
+        },
+      },
+    });
+
+    this.logger.log(`Task ${task.id} queued for retry`);
+
+    // 触发任务执行
+    try {
+      await this.orchestratorService.triggerTaskExecution(updatedTask.id);
+      this.logger.log(`Task ${task.id} execution triggered`);
+    } catch (error) {
+      const err = error as Error;
+      this.logger.error(`Failed to trigger task execution: ${err.message}`);
+      // 即使触发失败，任务也已经进入队列，调度器会处理
+    }
+
+    return new TaskResponseDto(updatedTask);
+  }
+
+  /**
    * 获取待执行任务队列
    * 供 Orchestrator 调度使用
    */
@@ -380,10 +426,7 @@ export class TasksService {
     const tasks = await this.prisma.task.findMany({
       where: {
         status: TaskStatus.QUEUED,
-        OR: [
-          { scheduleAt: null },
-          { scheduleAt: { lte: new Date() } },
-        ],
+        OR: [{ scheduleAt: null }, { scheduleAt: { lte: new Date() } }],
       },
       include: {
         appVersion: {
@@ -428,5 +471,45 @@ export class TasksService {
       cancelled,
     };
   }
-}
 
+  /**
+   * 获取任务的所有运行记录
+   * @param taskId 任务ID
+   * @returns 运行记录列表
+   */
+  async getTaskRuns(taskId: string): Promise<any[]> {
+    // 先验证任务存在
+    await this.findOne(taskId);
+
+    const taskRuns = await this.prisma.taskRun.findMany({
+      where: { taskId },
+      include: {
+        device: {
+          select: {
+            id: true,
+            serial: true,
+            model: true,
+            deviceType: true,
+          },
+        },
+      },
+      orderBy: { startAt: 'desc' },
+    });
+
+    return taskRuns.map((run) => ({
+      id: run.id,
+      taskId: run.taskId,
+      deviceId: run.deviceId,
+      device: run.device,
+      status: run.status,
+      startAt: run.startAt,
+      endAt: run.endAt,
+      totalActions: run.totalActions,
+      successfulActions: run.successfulActions,
+      coverageScreens: run.coverageScreens,
+      failureReason: run.failureReason,
+      metrics: run.metrics,
+      createdAt: run.createdAt,
+    }));
+  }
+}

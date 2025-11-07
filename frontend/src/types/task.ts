@@ -14,7 +14,7 @@ export enum TaskStatus {
  */
 export enum CoverageStrategy {
   FULL = 'FULL',
-  CORE = 'CORE',
+  SMOKE = 'SMOKE', // 后端使用 SMOKE 而不是 CORE
   CUSTOM = 'CUSTOM',
 }
 
@@ -26,7 +26,7 @@ export interface Task {
   name: string;
   appVersionId: string;
   deviceIds: string[];
-  coverageStrategy: CoverageStrategy;
+  coverageProfile: CoverageStrategy; // 后端字段名是 coverageProfile
   blacklistPaths?: string[];
   priority: number;
   status: TaskStatus;
@@ -68,8 +68,12 @@ export interface CreateTaskDto {
   name: string;
   appVersionId: string;
   deviceIds: string[];
-  coverageStrategy: CoverageStrategy;
-  blacklistPaths?: string[];
+  coverageProfile: CoverageStrategy; // 后端字段名是 coverageProfile
+  coverageConfig?: {
+    blacklistPaths?: string[];
+    maxDepth?: number;
+    timeout?: number;
+  };
   priority?: number;
 }
 

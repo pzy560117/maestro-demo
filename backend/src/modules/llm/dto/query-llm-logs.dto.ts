@@ -74,4 +74,3 @@ export class QueryLlmLogsDto {
   @Min(1)
   pageSize?: number = 50;
 }
-

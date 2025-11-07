@@ -6,11 +6,15 @@ import {
   QueuePriority,
   RecoveryStrategy,
 } from '../types/orchestrator.types';
+import { ScreenCaptureService } from './screen-capture.service';
+import { ActionExecutorService } from './action-executor.service';
+import { AppiumService } from '../../integrations/appium/appium.service';
+import { PrismaService } from '../../common/prisma/prisma.service';
 
 /**
  * 状态机服务
  * 实现功能 C：遍历调度状态机（FR-02）
- * 
+ *
  * 验收标准：
  * 1. 当界面重复时，VisitedGraph 阻止重复动作，队列降级
  * 2. 执行失败时调用回退策略（UI Undo → App Restart）
@@ -21,6 +25,13 @@ import {
 export class StateMachineService {
   private readonly logger = new Logger(StateMachineService.name);
 
+  constructor(
+    private readonly screenCapture: ScreenCaptureService,
+    private readonly actionExecutor: ActionExecutorService,
+    private readonly appium: AppiumService,
+    private readonly prisma: PrismaService,
+  ) {}
+
   /**
    * 状态转换主控函数
    * 根据当前状态和上下文决定下一个状态
@@ -29,9 +40,7 @@ export class StateMachineService {
     currentState: OrchestratorState,
     context: TaskRunContext,
   ): Promise<StateTransitionResult> {
-    this.logger.debug(
-      `State transition: ${currentState} -> ? (TaskRun: ${context.taskRunId})`,
-    );
+    this.logger.debug(`State transition: ${currentState} -> ? (TaskRun: ${context.taskRunId})`);
 
     try {
       switch (currentState) {
@@ -56,10 +65,7 @@ export class StateMachineService {
       }
     } catch (error) {
       const err = error as Error;
-      this.logger.error(
-        `State transition error: ${err.message}`,
-        err.stack,
-      );
+      this.logger.error(`State transition error: ${err.message}`, err.stack);
       return {
         newState: OrchestratorState.RECOVERING,
         success: false,
@@ -72,9 +78,7 @@ export class StateMachineService {
    * IDLE → BOOTSTRAPPING
    * 开始引导启动流程
    */
-  private async handleIdleState(
-    context: TaskRunContext,
-  ): Promise<StateTransitionResult> {
+  private async handleIdleState(context: TaskRunContext): Promise<StateTransitionResult> {
     this.logger.log(`Starting task run: ${context.taskRunId}`);
 
     // 初始化统计数据
@@ -96,28 +100,103 @@ export class StateMachineService {
    * BOOTSTRAPPING → INSPECTING
    * 完成应用安装和初始化后进入检查状态
    */
-  private async handleBootstrappingState(
-    context: TaskRunContext,
-  ): Promise<StateTransitionResult> {
-    this.logger.log(`Bootstrapping completed for ${context.packageName}`);
+  private async handleBootstrappingState(context: TaskRunContext): Promise<StateTransitionResult> {
+    this.logger.log(`Bootstrapping for ${context.packageName}`);
 
-    // TODO: 在 Iteration 1 后续实现安装 APK、启动应用逻辑
+    try {
+      // 1. 创建 Appium session（如果还没有）
+      if (!context.appiumSessionId) {
+        this.logger.log(`Creating Appium session for device ${context.deviceId}`);
 
-    return {
-      newState: OrchestratorState.INSPECTING,
-      success: true,
-    };
+        // 获取设备序列号
+        const device = await this.prisma.device.findUnique({
+          where: { id: context.deviceId },
+        });
+
+        if (!device) {
+          throw new Error(`Device ${context.deviceId} not found`);
+        }
+
+        // 创建 Appium session（带重试机制）
+        const sessionId = await this.createAppiumSessionWithRetry(
+          device.serial,
+          context.packageName,
+          3, // 最多重试3次
+        );
+
+        context.appiumSessionId = sessionId;
+        this.logger.log(`Appium session created: ${sessionId}`);
+      }
+
+      // 2. 启动应用
+      await this.appium.launchApp(context.appiumSessionId, context.packageName);
+      this.logger.log(`App launched: ${context.packageName}`);
+
+      return {
+        newState: OrchestratorState.INSPECTING,
+        success: true,
+      };
+    } catch (error) {
+      const err = error as Error;
+      this.logger.error(`Bootstrapping failed: ${err.message}`);
+      return {
+        newState: OrchestratorState.RECOVERING,
+        success: false,
+        error: err.message,
+      };
+    }
+  }
+
+  /**
+   * 带重试机制的 Appium 会话创建
+   * @param deviceSerial 设备序列号
+   * @param packageName 应用包名
+   * @param maxRetries 最大重试次数
+   * @returns 会话ID
+   */
+  private async createAppiumSessionWithRetry(
+    deviceSerial: string,
+    packageName: string,
+    maxRetries: number,
+  ): Promise<string> {
+    let lastError: Error | undefined;
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        this.logger.log(`Attempting to create Appium session (attempt ${attempt}/${maxRetries})`);
+
+        const sessionId = await this.appium.createSession(deviceSerial, packageName);
+
+        this.logger.log(`Appium session created successfully on attempt ${attempt}`);
+        return sessionId;
+      } catch (error) {
+        lastError = error as Error;
+        this.logger.warn(
+          `Appium session creation failed (attempt ${attempt}/${maxRetries}): ${lastError.message}`,
+        );
+
+        // 如果不是最后一次尝试，等待后重试
+        if (attempt < maxRetries) {
+          const delayMs = attempt * 2000; // 递增延迟：2s, 4s, 6s
+          this.logger.log(`Retrying in ${delayMs}ms...`);
+          await new Promise((resolve) => setTimeout(resolve, delayMs));
+        }
+      }
+    }
+
+    // 所有重试都失败
+    throw new Error(
+      `Failed to create Appium session after ${maxRetries} attempts. Last error: ${lastError?.message}`,
+    );
   }
 
   /**
    * TRAVERSING → INSPECTING | TERMINATED
    * 决策下一步动作
-   * 
+   *
    * 验收标准1：当界面重复时，VisitedGraph 阻止重复动作，队列降级
    */
-  private async handleTraversingState(
-    context: TaskRunContext,
-  ): Promise<StateTransitionResult> {
+  private async handleTraversingState(context: TaskRunContext): Promise<StateTransitionResult> {
     // 检查终止条件
     if (this.shouldTerminate(context)) {
       return {
@@ -160,48 +239,105 @@ export class StateMachineService {
    * INSPECTING → EXECUTING
    * 分析当前界面，生成动作计划
    */
-  private async handleInspectingState(
-    context: TaskRunContext,
-  ): Promise<StateTransitionResult> {
-    // TODO: 在 Iteration 1 后续实现截图、DOM 获取、LLM 请求
-
+  private async handleInspectingState(context: TaskRunContext): Promise<StateTransitionResult> {
     this.logger.debug(`Inspecting screen for TaskRun ${context.taskRunId}`);
 
-    return {
-      newState: OrchestratorState.EXECUTING,
-      success: true,
-    };
+    try {
+      if (!context.appiumSessionId) {
+        throw new Error('Appium session not initialized');
+      }
+
+      // 1. 捕获当前界面
+      const screenData = await this.screenCapture.captureScreen(
+        context.appiumSessionId,
+        context.taskRunId,
+        context.appVersionId,
+      );
+
+      // 2. 检查界面是否已访问
+      if (context.visitedGraph.visitedSignatures.has(screenData.signature)) {
+        this.logger.debug(`Screen already visited: ${screenData.signature}`);
+        // 界面已访问，可能需要回退或选择其他动作
+        return {
+          newState: OrchestratorState.TRAVERSING,
+          success: true,
+          data: { revisit: true, signature: screenData.signature },
+        };
+      }
+
+      // 3. 标记界面为已访问
+      context.visitedGraph.visitedSignatures.add(screenData.signature);
+      context.stats.coverageScreens += 1;
+
+      // 4. 保存当前界面数据到上下文
+      context.currentScreen = screenData;
+
+      return {
+        newState: OrchestratorState.EXECUTING,
+        success: true,
+      };
+    } catch (error) {
+      const err = error as Error;
+      this.logger.error(`Inspecting failed: ${err.message}`);
+      return {
+        newState: OrchestratorState.RECOVERING,
+        success: false,
+        error: err.message,
+      };
+    }
   }
 
   /**
    * EXECUTING → VERIFYING | RECOVERING
    * 执行动作
-   * 
+   *
    * 验收标准2：执行失败时调用回退策略
    */
-  private async handleExecutingState(
-    context: TaskRunContext,
-  ): Promise<StateTransitionResult> {
-    // TODO: 在 Iteration 1 后续实现 Appium 动作执行
+  private async handleExecutingState(context: TaskRunContext): Promise<StateTransitionResult> {
+    try {
+      if (!context.appiumSessionId || !context.currentScreen) {
+        throw new Error('Missing session or screen data');
+      }
 
-    context.stats.totalActions += 1;
+      // 执行下一个动作
+      const result = await this.actionExecutor.executeNextAction(
+        context.appiumSessionId,
+        context.taskRunId,
+        context.currentScreen.screenId,
+        context.currentScreen.screenshotPath,
+        context.currentScreen.domPath,
+        context.currentScreen.domJson,
+        context.currentScreen.visionSummary,
+        context.currentScreen.screenshotPublicUrl,
+      );
 
-    // 模拟执行成功
-    const executionSuccess = true;
+      context.stats.totalActions += 1;
 
-    if (executionSuccess) {
-      context.stats.successfulActions += 1;
-      return {
-        newState: OrchestratorState.VERIFYING,
-        success: true,
-      };
-    } else {
+      if (result.success) {
+        context.stats.successfulActions += 1;
+        this.logger.log(`Action executed successfully: ${result.actionType}`);
+        return {
+          newState: OrchestratorState.VERIFYING,
+          success: true,
+          data: { actionId: result.actionId },
+        };
+      } else {
+        context.stats.failedActions += 1;
+        this.logger.warn(`Action execution failed: ${result.error}`);
+        return {
+          newState: OrchestratorState.RECOVERING,
+          success: false,
+          error: result.error || 'action_execution_failed',
+        };
+      }
+    } catch (error) {
+      const err = error as Error;
       context.stats.failedActions += 1;
-      this.logger.warn(`Action execution failed, entering recovery`);
+      this.logger.error(`Executing failed: ${err.message}`);
       return {
         newState: OrchestratorState.RECOVERING,
         success: false,
-        error: 'action_execution_failed',
+        error: err.message,
       };
     }
   }
@@ -210,32 +346,36 @@ export class StateMachineService {
    * VERIFYING → TRAVERSING | RECOVERING
    * 验证动作执行结果
    */
-  private async handleVerifyingState(
-    context: TaskRunContext,
-  ): Promise<StateTransitionResult> {
-    // TODO: 在 Iteration 1 后续实现验证逻辑
-
+  private async handleVerifyingState(context: TaskRunContext): Promise<StateTransitionResult> {
     this.logger.debug(`Verifying action result`);
 
-    // 验收标准1：记录界面签名，更新 VisitedGraph
-    // 假设验证成功，增加覆盖界面数
-    context.stats.coverageScreens += 1;
+    try {
+      // 验证成功后，等待界面稳定
+      await new Promise((resolve) => setTimeout(resolve, 1000));
 
-    return {
-      newState: OrchestratorState.TRAVERSING,
-      success: true,
-    };
+      // 继续遍历
+      return {
+        newState: OrchestratorState.TRAVERSING,
+        success: true,
+      };
+    } catch (error) {
+      const err = error as Error;
+      this.logger.error(`Verifying failed: ${err.message}`);
+      return {
+        newState: OrchestratorState.RECOVERING,
+        success: false,
+        error: err.message,
+      };
+    }
   }
 
   /**
    * RECOVERING → TRAVERSING | TERMINATED
    * 执行回退策略
-   * 
+   *
    * 验收标准2：执行回退策略（UI Undo → App Restart → Device Reboot）
    */
-  private async handleRecoveringState(
-    context: TaskRunContext,
-  ): Promise<StateTransitionResult> {
+  private async handleRecoveringState(context: TaskRunContext): Promise<StateTransitionResult> {
     this.logger.log(`Recovering from failure`);
 
     // 选择回退策略（按严重程度递增）
@@ -267,9 +407,7 @@ export class StateMachineService {
    * TERMINATED
    * 任务终止，清理资源
    */
-  private async handleTerminatedState(
-    context: TaskRunContext,
-  ): Promise<StateTransitionResult> {
+  private async handleTerminatedState(context: TaskRunContext): Promise<StateTransitionResult> {
     this.logger.log(`Task run terminated: ${context.taskRunId}`);
 
     // TODO: 在 Iteration 1 后续实现清理逻辑
@@ -282,25 +420,21 @@ export class StateMachineService {
 
   /**
    * 检查是否应该终止任务
-   * 
+   *
    * 验收标准3：任务完成后状态变为 SUCCEEDED
    */
   private shouldTerminate(context: TaskRunContext): boolean {
     const { stats, coverageConfig } = context;
 
     // 检查超时
-    const elapsedSeconds =
-      (Date.now() - stats.startTime.getTime()) / 1000;
+    const elapsedSeconds = (Date.now() - stats.startTime.getTime()) / 1000;
     if (coverageConfig.timeout && elapsedSeconds >= coverageConfig.timeout) {
       this.logger.warn(`Task timeout: ${elapsedSeconds}s`);
       return true;
     }
 
     // 检查最大动作数
-    if (
-      coverageConfig.maxActions &&
-      stats.totalActions >= coverageConfig.maxActions
-    ) {
+    if (coverageConfig.maxActions && stats.totalActions >= coverageConfig.maxActions) {
       this.logger.log(`Reached max actions: ${stats.totalActions}`);
       return true;
     }
@@ -314,7 +448,7 @@ export class StateMachineService {
   /**
    * 从队列中取出下一个动作
    * 优先级：PRIMARY > FALLBACK > REVISIT
-   * 
+   *
    * 验收标准1：队列降级
    */
   private dequeueAction(context: TaskRunContext): any {
@@ -378,24 +512,38 @@ export class StateMachineService {
   ): Promise<void> {
     this.logger.log(`Executing recovery strategy: ${strategy}`);
 
+    if (!context.appiumSessionId) {
+      throw new Error('No Appium session available for recovery');
+    }
+
     switch (strategy) {
       case RecoveryStrategy.UI_UNDO:
-        // TODO: 实现 UI 返回逻辑
+        // 返回上一页
         this.logger.debug('UI Undo: Pressing back button');
+        await this.appium.back(context.appiumSessionId);
+        await new Promise((resolve) => setTimeout(resolve, 500));
         break;
+
       case RecoveryStrategy.APP_RESTART:
-        // TODO: 实现应用重启逻辑
+        // 重启应用
         this.logger.debug('App Restart: Stopping and starting app');
+        await this.appium.launchApp(context.appiumSessionId, context.packageName);
+        await new Promise((resolve) => setTimeout(resolve, 2000));
         break;
+
       case RecoveryStrategy.CLEAN_RESTART:
-        // TODO: 实现清除数据重启逻辑
+        // 清除数据并重启（需要 ADB 支持）
         this.logger.debug('Clean Restart: Clearing app data and restarting');
+        // TODO: 实现 ADB 清除数据命令
+        await this.appium.launchApp(context.appiumSessionId, context.packageName);
+        await new Promise((resolve) => setTimeout(resolve, 3000));
         break;
+
       case RecoveryStrategy.DEVICE_REBOOT:
-        // TODO: 实现设备重启逻辑
+        // 设备重启（需要 ADB 支持）
         this.logger.debug('Device Reboot: Rebooting device');
-        break;
+        // TODO: 实现设备重启逻辑
+        throw new Error('Device reboot not implemented');
     }
   }
 }
-

@@ -37,10 +37,12 @@ describe('ScreensService', () => {
   const mockStorageService = {
     init: jest.fn(),
     saveScreenshot: jest.fn(),
+    saveThumbnail: jest.fn(),
     saveDom: jest.fn(),
     deleteFile: jest.fn(),
     readDom: jest.fn(),
     readScreenshot: jest.fn(),
+    resolveAbsolutePath: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -82,8 +84,15 @@ describe('ScreensService', () => {
     };
 
     beforeEach(() => {
-      mockStorageService.saveScreenshot.mockResolvedValue('screenshots/2024-01/screen_abc.webp');
-      mockStorageService.saveDom.mockResolvedValue('dom/2024-01/dom_abc.json');
+      mockStorageService.saveScreenshot.mockResolvedValue({
+        relativePath: 'screenshots/2024-01/screen_abc.webp',
+        absolutePath: '/tmp/screenshots/2024-01/screen_abc.webp',
+        publicUrl: 'https://minio.example.com/screen_abc',
+      });
+      mockStorageService.saveDom.mockResolvedValue({
+        relativePath: 'dom/2024-01/dom_abc.json',
+        absolutePath: '/tmp/dom/2024-01/dom_abc.json',
+      });
       mockSignatureService.computeFileHash.mockReturnValue('screenshot-hash');
       mockSignatureService.computeDomHash.mockReturnValue('dom-hash');
       mockSignatureService.extractPrimaryText.mockReturnValue('登录页面');
@@ -99,6 +108,7 @@ describe('ScreensService', () => {
         domHash: 'dom-hash',
         primaryText: '登录页面',
         screenshotPath: 'screenshots/2024-01/screen_abc.webp',
+        screenshotPublicUrl: 'https://minio.example.com/screen_abc',
         screenshotThumbPath: null,
         domPath: 'dom/2024-01/dom_abc.json',
         orientation: ScreenOrientation.PORTRAIT,
@@ -130,6 +140,7 @@ describe('ScreensService', () => {
         domHash: 'dom-hash',
         primaryText: '登录页面',
         screenshotPath: 'screenshots/2024-01/screen_abc.webp',
+        screenshotPublicUrl: 'https://minio.example.com/screen_abc',
         screenshotThumbPath: null,
         domPath: 'dom/2024-01/dom_abc.json',
         orientation: ScreenOrientation.PORTRAIT,

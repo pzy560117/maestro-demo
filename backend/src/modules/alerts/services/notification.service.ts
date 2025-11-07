@@ -26,9 +26,7 @@ export class NotificationService {
     message: string,
     payload?: Record<string, any>,
   ): Promise<{ status: NotificationSendStatus; response?: any; error?: string }> {
-    this.logger.log(
-      `Sending notification via ${channel} to ${target}`,
-    );
+    this.logger.log(`Sending notification via ${channel} to ${target}`);
 
     try {
       switch (channel) {
@@ -46,10 +44,7 @@ export class NotificationService {
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       const errorStack = error instanceof Error ? error.stack : undefined;
-      this.logger.error(
-        `Failed to send notification via ${channel}: ${errorMessage}`,
-        errorStack,
-      );
+      this.logger.error(`Failed to send notification via ${channel}: ${errorMessage}`, errorStack);
       return {
         status: NotificationSendStatus.FAILED,
         error: errorMessage,
@@ -125,9 +120,7 @@ export class NotificationService {
     });
 
     if (response.data.code !== 0) {
-      throw new Error(
-        `Feishu API error: ${response.data.msg || 'Unknown error'}`,
-      );
+      throw new Error(`Feishu API error: ${response.data.msg || 'Unknown error'}`);
     }
 
     return { status: NotificationSendStatus.SENT, response: response.data };
@@ -144,7 +137,8 @@ export class NotificationService {
     const body = {
       msgtype: 'markdown',
       markdown: {
-        content: `# 🔔 Maestro 告警通知\n\n` +
+        content:
+          `# 🔔 Maestro 告警通知\n\n` +
           `**告警类型**: ${payload?.alertType || 'SYSTEM'}\n\n` +
           `**严重级别**: ${payload?.severity || 'P2'}\n\n` +
           `**消息**: ${message}\n\n` +
@@ -159,9 +153,7 @@ export class NotificationService {
     });
 
     if (response.data.errcode !== 0) {
-      throw new Error(
-        `Wechat API error: ${response.data.errmsg || 'Unknown error'}`,
-      );
+      throw new Error(`Wechat API error: ${response.data.errmsg || 'Unknown error'}`);
     }
 
     return { status: NotificationSendStatus.SENT, response: response.data };
@@ -218,4 +210,3 @@ export class NotificationService {
     return colorMap[severity] || 'blue';
   }
 }
-

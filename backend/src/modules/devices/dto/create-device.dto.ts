@@ -1,12 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import {
-  IsString,
-  IsEnum,
-  IsOptional,
-  IsObject,
-  Length,
-  Matches,
-} from 'class-validator';
+import { IsString, IsEnum, IsOptional, IsObject, Length, Matches } from 'class-validator';
 import { DeviceType } from '@prisma/client';
 
 /**
@@ -65,4 +58,3 @@ export class CreateDeviceDto {
   @IsOptional()
   tags?: string[];
 }
-

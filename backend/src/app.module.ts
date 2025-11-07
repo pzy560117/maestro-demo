@@ -24,29 +24,28 @@ import { HealthController } from './modules/common/health/health.controller';
       isGlobal: true,
       envFilePath: ['.env.local', '.env'],
     }),
-    
+
     // 数据库模块
     PrismaModule,
-    
+
     // WebSocket 模块（全局）
     WebSocketModule,
-    
+
     // 业务模块
     DevicesModule,
     AppsModule,
     TasksModule,
     OrchestratorModule,
     LlmModule,
-    
+
     // Iteration 2 新增模块
     ScreensModule,
     LocatorsModule,
     IntegrationsModule,
-    
+
     // Iteration 3 新增模块
     AlertsModule,
   ],
   controllers: [HealthController],
 })
 export class AppModule {}
-

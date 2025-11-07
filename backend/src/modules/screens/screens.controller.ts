@@ -14,7 +14,15 @@ import {
   ParseUUIDPipe,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiQuery, ApiConsumes, ApiBody } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiParam,
+  ApiQuery,
+  ApiConsumes,
+  ApiBody,
+} from '@nestjs/swagger';
 import { ScreensService } from './screens.service';
 import { ScreenDiffService } from './services/screen-diff.service';
 import { CreateScreenDto } from './dto/create-screen.dto';
@@ -174,10 +182,7 @@ export class ScreensController {
     @Body('baseScreenId', ParseUUIDPipe) baseScreenId: string,
     @Body('targetScreenId', ParseUUIDPipe) targetScreenId: string,
   ) {
-    const diff = await this.screenDiffService.compareScreens(
-      baseScreenId,
-      targetScreenId,
-    );
+    const diff = await this.screenDiffService.compareScreens(baseScreenId, targetScreenId);
     return {
       code: 0,
       message: '界面差异分析完成',
@@ -204,10 +209,7 @@ export class ScreensController {
     @Param('baseScreenId', ParseUUIDPipe) baseScreenId: string,
     @Param('targetScreenId', ParseUUIDPipe) targetScreenId: string,
   ) {
-    const diff = await this.screenDiffService.findDiff(
-      baseScreenId,
-      targetScreenId,
-    );
+    const diff = await this.screenDiffService.findDiff(baseScreenId, targetScreenId);
     return {
       code: 0,
       message: '查询成功',
@@ -262,4 +264,3 @@ export class ScreensController {
     };
   }
 }
-

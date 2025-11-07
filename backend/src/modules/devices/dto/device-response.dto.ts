@@ -57,4 +57,3 @@ export class DeviceResponseDto {
     this.updatedAt = device.updatedAt;
   }
 }
-

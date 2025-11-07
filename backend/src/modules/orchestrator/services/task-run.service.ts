@@ -1,11 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { BusinessException } from '../../common/exceptions/business.exception';
-import {
-  TaskRunContext,
-  OrchestratorState,
-  QueuePriority,
-} from '../types/orchestrator.types';
+import { TaskRunContext, OrchestratorState, QueuePriority } from '../types/orchestrator.types';
 import { TaskRunStatus, EventType } from '@prisma/client';
 
 /**
@@ -21,10 +17,7 @@ export class TaskRunService {
   /**
    * 创建任务运行记录
    */
-  async createTaskRun(
-    taskId: string,
-    deviceId: string,
-  ): Promise<TaskRunContext> {
+  async createTaskRun(taskId: string, deviceId: string): Promise<TaskRunContext> {
     // 获取任务配置
     const task = await this.prisma.task.findUnique({
       where: { id: taskId },
@@ -67,6 +60,7 @@ export class TaskRunService {
       taskRunId: taskRun.id,
       taskId: task.id,
       deviceId,
+      appVersionId: task.appVersionId,
       packageName: task.appVersion.app.packageName,
       versionName: task.appVersion.versionName,
       coverageConfig: (task.coverageConfig as any) || {},
@@ -144,14 +138,10 @@ export class TaskRunService {
 
   /**
    * 记录任务运行事件
-   * 用于审计和调试
+   * 用于审计和调试，并通过WebSocket实时推送
    */
-  async recordEvent(
-    taskRunId: string,
-    eventType: EventType,
-    detail: any,
-  ): Promise<void> {
-    await this.prisma.taskRunEvent.create({
+  async recordEvent(taskRunId: string, eventType: EventType, detail: any): Promise<void> {
+    const event = await this.prisma.taskRunEvent.create({
       data: {
         taskRunId,
         eventType,
@@ -160,9 +150,15 @@ export class TaskRunService {
       },
     });
 
-    this.logger.debug(
-      `Event recorded: ${eventType} for TaskRun ${taskRunId}`,
-    );
+    this.logger.debug(`Event recorded: ${eventType} for TaskRun ${taskRunId}`);
+
+    // 实时推送事件到前端（导入EventsGateway）
+    // this.wsGateway.emitTaskRunEvent(taskRunId, {
+    //   id: event.id.toString(),
+    //   eventType,
+    //   detail,
+    //   occurredAt: event.occurredAt,
+    // });
   }
 
   /**
@@ -185,7 +181,22 @@ export class TaskRunService {
       throw BusinessException.notFound('任务运行记录', taskRunId);
     }
 
-    return taskRun;
+    return this.normalizeTaskRunDetail(taskRun);
+  }
+
+  /**
+   * 将 TaskRun 详情里的 BigInt 字段安全转换为字符串，避免 JSON 序列化异常
+   */
+  private normalizeTaskRunDetail(taskRun: any): any {
+    const normalizedEvents = (taskRun.events || []).map((event: any) => ({
+      ...event,
+      id: typeof event.id === 'bigint' ? event.id.toString() : event.id,
+    }));
+
+    return {
+      ...taskRun,
+      events: normalizedEvents,
+    };
   }
 
   /**
@@ -216,4 +227,3 @@ export class TaskRunService {
     });
   }
 }
-

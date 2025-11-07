@@ -18,13 +18,13 @@ export interface VisionElement {
 /**
  * MidSceneJS 集成服务
  * 功能 E：视觉解析（FR-06/07）
- * 
+ *
  * 职责：
  * 1. 调用 MidSceneJS 分析截图
  * 2. 提取视觉元素（文本、边界框、类型）
  * 3. OCR 文本识别
  * 4. 返回结构化数据供定位生成使用
- * 
+ *
  * 说明：
  * - 当前为 Mock 实现
  * - 后续集成真实 MidSceneJS API
@@ -40,7 +40,7 @@ export class MidSceneService {
 
   /**
    * 分析截图
-   * 
+   *
    * @param screenshotPath - 截图文件路径
    * @returns 视觉元素列表
    */
@@ -61,13 +61,13 @@ export class MidSceneService {
       // });
 
       this.logger.log(`Analyzed screen: ${screenshotPath}`);
-      
+
       // 暂时返回 Mock 数据
       return this.getMockVisionElements();
     } catch (error) {
       const err = error as Error;
       this.logger.error(`MidSceneJS analysis failed: ${err.message}`, err.stack);
-      
+
       // 失败时返回空数组，不影响主流程
       return [];
     }
@@ -75,7 +75,7 @@ export class MidSceneService {
 
   /**
    * OCR 文本识别
-   * 
+   *
    * @param screenshotPath - 截图文件路径
    * @param region - 识别区域（可选）
    * @returns 识别出的文本
@@ -96,7 +96,7 @@ export class MidSceneService {
       // });
 
       this.logger.log(`Extracted text from: ${screenshotPath}`);
-      
+
       return [];
     } catch (error) {
       const err = error as Error;
@@ -107,7 +107,7 @@ export class MidSceneService {
 
   /**
    * 元素检测
-   * 
+   *
    * @param screenshotPath - 截图文件路径
    * @returns 检测到的元素边界框
    */
@@ -123,7 +123,7 @@ export class MidSceneService {
       // });
 
       this.logger.log(`Detected elements in: ${screenshotPath}`);
-      
+
       return [];
     } catch (error) {
       const err = error as Error;
@@ -168,4 +168,3 @@ export class MidSceneService {
     };
   }
 }
-

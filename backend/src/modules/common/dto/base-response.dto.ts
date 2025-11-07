@@ -38,4 +38,3 @@ export class BaseResponseDto<T = unknown> {
     return new BaseResponseDto(code, message, data || null);
   }
 }
-

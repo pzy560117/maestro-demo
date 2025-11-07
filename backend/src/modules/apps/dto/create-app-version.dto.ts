@@ -54,4 +54,3 @@ export class CreateAppVersionDto {
   @IsDateString({}, { message: '发布时间格式不正确' })
   releasedAt?: string;
 }
-

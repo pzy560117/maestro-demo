@@ -4,12 +4,12 @@ import * as crypto from 'crypto';
 /**
  * 界面签名服务
  * 功能 G：界面签名与存档（FR-09）
- * 
+ *
  * 职责：
  * 1. 生成界面签名（基于截图、DOM、主文案）
  * 2. 计算哈希值
  * 3. 确保同一界面生成相同签名
- * 
+ *
  * 验收标准：
  * 1. 同一界面多次访问生成相同签名
  * 2. 签名唯一且稳定
@@ -20,23 +20,15 @@ export class ScreenSignatureService {
 
   /**
    * 生成界面签名
-   * 
+   *
    * @param screenshotHash - 截图文件哈希
    * @param domHash - DOM 结构哈希
    * @param primaryText - 主要文案（可选）
    * @returns 界面签名（SHA-256）
    */
-  generateSignature(
-    screenshotHash: string,
-    domHash: string,
-    primaryText?: string,
-  ): string {
+  generateSignature(screenshotHash: string, domHash: string, primaryText?: string): string {
     // 组合关键信息
-    const components = [
-      screenshotHash,
-      domHash,
-      primaryText || '',
-    ].filter(Boolean);
+    const components = [screenshotHash, domHash, primaryText || ''].filter(Boolean);
 
     // 生成签名
     const signature = this.computeHash(components.join('::'));
@@ -48,7 +40,7 @@ export class ScreenSignatureService {
 
   /**
    * 计算文件哈希（用于截图）
-   * 
+   *
    * @param buffer - 文件内容
    * @returns SHA-256 哈希
    */
@@ -59,7 +51,7 @@ export class ScreenSignatureService {
   /**
    * 计算 DOM 哈希
    * 规范化 DOM 结构，忽略动态属性
-   * 
+   *
    * @param domData - DOM 数据对象
    * @returns SHA-256 哈希
    */
@@ -76,7 +68,7 @@ export class ScreenSignatureService {
   /**
    * 提取主要文案
    * 从 DOM 中提取页面标题、主按钮等关键文本
-   * 
+   *
    * @param domData - DOM 数据对象
    * @returns 主要文案
    */
@@ -161,7 +153,7 @@ export class ScreenSignatureService {
   /**
    * 计算元素哈希
    * 用于元素去重和版本管理
-   * 
+   *
    * @param element - 元素数据
    * @returns SHA-256 哈希
    */
@@ -183,4 +175,3 @@ export class ScreenSignatureService {
     return this.computeHash(components.join('::'));
   }
 }
-

@@ -37,11 +37,11 @@ export class IntegrationsController {
     // 选择 MidScene 服务：优先使用 DashScope，否则使用 Real 或 Mock
     let midsceneHealth;
     let midsceneMode = 'mock';
-    
+
     if (midsceneEnabled) {
       // 检查是否配置了有效的 LLM API Key
       const hasValidApiKey = process.env.LLM_API_KEY && process.env.LLM_API_KEY !== 'sk-test-key';
-      
+
       if (hasValidApiKey) {
         midsceneHealth = await this.midsceneDashScope.healthCheck();
         midsceneMode = 'dashscope';
@@ -55,9 +55,7 @@ export class IntegrationsController {
     }
 
     const [appiumHealth, minioHealth] = await Promise.all([
-      appiumEnabled
-        ? this.appiumReal.healthCheck()
-        : this.appiumMock.healthCheck(),
+      appiumEnabled ? this.appiumReal.healthCheck() : this.appiumMock.healthCheck(),
       this.minioService.healthCheck(),
     ]);
 
@@ -160,4 +158,3 @@ export class IntegrationsController {
     };
   }
 }
-

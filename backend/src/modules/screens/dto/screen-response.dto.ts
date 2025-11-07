@@ -91,6 +91,9 @@ export class ScreenResponseDto {
   @ApiProperty({ description: '截图路径' })
   screenshotPath: string;
 
+  @ApiProperty({ description: '截图公共访问 URL', required: false })
+  screenshotPublicUrl?: string | null;
+
   @ApiProperty({ description: '缩略图路径', required: false })
   screenshotThumbPath?: string | null;
 
@@ -134,6 +137,7 @@ export class ScreenResponseDto {
     this.domHash = screen.domHash;
     this.primaryText = screen.primaryText;
     this.screenshotPath = screen.screenshotPath;
+    this.screenshotPublicUrl = screen.screenshotPublicUrl;
     this.screenshotThumbPath = screen.screenshotThumbPath;
     this.domPath = screen.domPath;
     this.orientation = screen.orientation;
@@ -151,4 +155,3 @@ export class ScreenResponseDto {
     }
   }
 }
-

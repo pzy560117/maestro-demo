@@ -23,4 +23,3 @@ export class AcknowledgeAlertDto {
   @MaxLength(500)
   note?: string;
 }
-

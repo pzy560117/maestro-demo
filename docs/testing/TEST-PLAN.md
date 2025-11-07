@@ -308,10 +308,10 @@ curl http://localhost:5173
 | TC005 | 应用列表查看 | ✅ 通过 | 无 | - | 2025-11-05 15:14 |
 | TC006 | 创建应用 | ✅ 通过 | 无 | - | 2025-11-05 15:14 |
 | TC007 | 创建应用版本 | ✅ 通过 | 问题#7: 前后端字段名不匹配 | ✅ 已修复 | 2025-11-05 15:18 |
-| TC008 | 任务列表查看 | ✅ 通过 | 无 | - | 2025-11-05 15:22 |
-| TC009 | 创建遍历任务 | 🔄 进行中 | 问题#8: 设备数据为空，阻塞任务创建 | 🔄 修复中 | 2025-11-05 15:30 |
-| TC010 | 查看任务详情 | ⏳ 待执行 | - | - | - |
-| TC011 | 取消任务 | ⏳ 待执行 | - | - | - |
+| TC008 | 任务列表查看 | ✅ 通过 | 问题#11: 缺少deviceIds字段 | ✅ 已修复 | 2025-11-05 16:48 |
+| TC009 | 创建遍历任务 | ✅ 通过 | 问题#9: 前后端字段/枚举不匹配 | ✅ 已修复 | 2025-11-05 16:29 |
+| TC010 | 查看任务详情 | ✅ 通过 | 问题#10,#11,#12 | ✅ 已修复 | 2025-11-05 16:55 |
+| TC011 | 取消任务 | ✅ 通过 | 问题#12: API响应格式 | ✅ 已修复 | 2025-11-05 16:57 |
 | TC012 | 截图列表查看 | ⏳ 待执行 | - | - | - |
 | TC013 | 查看截图详情 | ⏳ 待执行 | - | - | - |
 | TC014 | 告警列表查看 | ⏳ 待执行 | - | - | - |
@@ -545,4 +545,157 @@ curl http://localhost:5173
 - **修复状态**: ✅ 代码已修复
 - **验证状态**: ⏳ 待重启后端服务验证
 - **修复时间**: 2025-11-05 15:30
+
+### 问题 #9: 前后端字段名和枚举值不匹配（任务创建）
+- **用例**: TC009 - 创建遍历任务
+- **发现时间**: 2025-11-05 16:10
+- **严重程度**: P0（阻塞）
+- **位置**: `frontend/src/`, `backend/src/modules/tasks/`
+- **描述**: 任务创建返回 400 Bad Request
+- **根本原因**: 
+  1. **字段名不匹配**:
+     - 前端: `coverageStrategy`, `blacklistPaths`(顶层)
+     - 后端: `coverageProfile`, `coverageConfig.blacklistPaths`(嵌套)
+  2. **枚举值不匹配**:
+     - 前端: `CoverageStrategy.CORE`
+     - 后端: `CoverageProfile.SMOKE`
+  3. **响应格式不统一**:
+     - create方法直接返回 `TaskResponseDto`，未使用 `BaseResponseDto` 包装
+     - 前端期望统一格式: `{code, message, data}`
+- **修复方案**: 
+  1. **前端类型定义修复**:
+     - 更新 `CreateTaskDto`: `coverageProfile`, `coverageConfig`
+     - 更新枚举: `CORE` → `SMOKE`
+  2. **前端数据映射**:
+     - TaskCreate.tsx 中映射字段到后端格式
+     - 优先级范围映射: 0-10 → 1-5
+  3. **后端响应格式统一**:
+     - tasks.controller.ts 的 create 方法使用 `BaseResponseDto.success()`
+     - 添加缺失的导入: `BaseResponseDto`
+- **修复文件**: 
+  - `frontend/src/types/task.ts` - 类型定义和枚举
+  - `frontend/src/modules/tasks/TaskCreate.tsx` - 数据映射
+  - `backend/src/modules/tasks/tasks.controller.ts` - 响应包装和导入
+- **修复状态**: ✅ 已修复
+- **验证状态**: ✅ 任务创建成功（ID: c1272194-5bcc-4ca5-b638-5b5b84e7b535）
+- **修复时间**: 2025-11-05 16:29
+
+### 问题 #10: Tasks API 响应格式不统一
+- **用例**: TC010 - 查看任务详情
+- **发现时间**: 2025-11-05 16:30
+- **严重程度**: P0（阻塞）
+- **位置**: `backend/src/modules/tasks/tasks.controller.ts`
+- **描述**: 任务列表和详情页无法正常显示，返回 `code: undefined`
+- **错误信息**: 
+  ```
+  GET /api/v1/tasks -> code: undefined, message: undefined
+  GET /api/v1/tasks/:id -> 200 OK 但未包装 BaseResponseDto
+  GET /api/v1/tasks/:id/runs -> 404 Not Found (端点缺失)
+  ```
+- **根本原因**: 
+  1. `findAll()`, `findOne()` 方法未使用 `BaseResponseDto` 包装
+  2. `getTaskRuns()` 方法完全缺失
+  3. 前端期望统一响应格式: `{code: 0, message, data}`
+- **修复方案**: 
+  1. **Service 层新增方法**:
+     - `getTaskRuns(taskId)`: 查询任务运行记录，包含设备信息
+  2. **Controller 层修复**:
+     - `findAll()` 返回值包装: `BaseResponseDto.success(result, '查询成功')`
+     - `findOne()` 返回值包装: `BaseResponseDto.success(task, '查询成功')`
+     - 新增 `GET :id/runs` 端点，返回: `BaseResponseDto.success(runs, '查询成功')`
+  3. **路由顺序优化**:
+     - 将 `:id/runs` 移到 `:id` 之前，避免路由冲突
+- **修复文件**: 
+  - `backend/src/modules/tasks/tasks.service.ts` - 新增 getTaskRuns 方法
+  - `backend/src/modules/tasks/tasks.controller.ts` - 修复 findAll, findOne, 新增 getTaskRuns 端点
+- **修复状态**: ✅ 已修复
+- **验证状态**: ✅ 已验证（API返回格式正确）
+- **修复时间**: 2025-11-05 16:35
+
+### 问题 #11: TaskResponseDto 缺少 deviceIds 字段
+- **用例**: TC008, TC009, TC010 - 任务列表和详情页
+- **发现时间**: 2025-11-05 16:42
+- **严重程度**: P0（阻塞）
+- **位置**: `backend/src/modules/tasks/dto/task-response.dto.ts`
+- **描述**: 前端任务列表页崩溃，`Cannot read properties of undefined (reading 'length')`
+- **错误信息**: 
+  ```
+  TaskList.tsx:200 Uncaught TypeError: Cannot read properties of undefined (reading 'length')
+  at task.deviceIds.length
+  ```
+- **根本原因**: 
+  1. `TaskResponseDto` 缺少 `deviceIds` 字段
+  2. 数据库 `Task` 表不存储 `deviceIds`（设备关联在 TaskRun 表）
+  3. 前端在 `TaskList.tsx:200` 访问 `task.deviceIds.length` 导致崩溃
+- **修复方案**: 
+  1. **存储策略**:
+     - 在 `Task.coverageConfig` JSON 字段中存储 `deviceIds` 数组
+     - 创建任务时将 `deviceIds` 添加到 `coverageConfig.deviceIds`
+  2. **DTO 修复**:
+     - 在 `TaskResponseDto` 中添加 `deviceIds: string[]` 字段
+     - 在构造函数中从 `coverageConfig.deviceIds` 提取并返回
+     - 对旧任务（没有此字段）返回空数组 `[]`，避免崩溃
+- **修复文件**: 
+  - `backend/src/modules/tasks/tasks.service.ts` - create 方法存储 deviceIds
+  - `backend/src/modules/tasks/dto/task-response.dto.ts` - 新增字段和提取逻辑
+- **修复状态**: ✅ 已修复
+- **验证状态**: ✅ 已验证
+  - 新任务：正确返回 `deviceIds: ["c0589250..."]`
+  - 旧任务：返回 `deviceIds: []`（兼容性良好）
+- **修复时间**: 2025-11-05 16:48
+
+### 问题 #12: Tasks Controller 其他方法未统一响应格式
+- **用例**: TC010, TC011 - 任务详情、取消任务
+- **发现时间**: 2025-11-05 16:52
+- **严重程度**: P1（影响功能）
+- **位置**: `backend/src/modules/tasks/tasks.controller.ts`
+- **描述**: 除 `create`、`findAll`、`findOne`、`getTaskRuns` 外的其他方法未统一响应格式
+- **根本原因**: 
+  - `update()` 方法直接返回 `TaskResponseDto`
+  - `cancel()` 方法直接返回 `TaskResponseDto`
+  - `getStats()` 方法直接返回统计对象
+  - `getPendingTasks()` 方法直接返回数组
+  - 前端期望所有 API 统一格式: `{code: 0, message, data}`
+- **修复方案**: 
+  - 为所有写操作和查询方法添加 `BaseResponseDto` 包装
+  - `update()` → `BaseResponseDto.success(task, '任务更新成功')`
+  - `cancel()` → `BaseResponseDto.success(task, '任务已取消')`
+  - `getStats()` → `BaseResponseDto.success(stats, '查询成功')`
+  - `getPendingTasks()` → `BaseResponseDto.success(tasks, '查询成功')`
+  - 注：`remove()` 使用 204 No Content，符合 RESTful 规范，无需包装
+- **修复文件**: 
+  - `backend/src/modules/tasks/tasks.controller.ts` - 所有方法统一响应格式
+- **修复状态**: ✅ 已修复
+- **验证状态**: ✅ 已验证
+  - `POST /tasks/:id/cancel` → `{code: 0, message: "任务已取消", data: {...}}`
+- **修复时间**: 2025-11-05 16:55
+
+### 问题 #13: 前端取消按钮条件错误 & 字段名不一致
+- **用例**: TC011 - 取消任务
+- **发现时间**: 2025-11-05 17:05
+- **严重程度**: P0（阻塞功能）
+- **位置**: `frontend/src/modules/tasks/TaskDetail.tsx`, `frontend/src/types/task.ts`
+- **描述**: 
+  1. 取消按钮只在 `RUNNING` 状态显示，用户的任务都是 `QUEUED` 状态无法取消
+  2. 前端 `Task` 接口使用 `coverageStrategy`，后端返回 `coverageProfile`
+  3. 覆盖策略枚举引用错误 `CoverageStrategy.CORE`（应为 `SMOKE`）
+- **根本原因**: 
+  - 取消按钮显示条件不完整：`task.status === TaskStatus.RUNNING`
+  - 前后端字段名不一致：`coverageStrategy` vs `coverageProfile`
+  - 枚举值引用过时：使用了已废弃的 `CORE` 而非 `SMOKE`
+- **修复方案**: 
+  1. **按钮显示条件修复**:
+     - 从 `task.status === TaskStatus.RUNNING` 
+     - 改为 `(task.status === TaskStatus.QUEUED || task.status === TaskStatus.RUNNING)`
+  2. **字段名统一**:
+     - `Task` 接口字段改为 `coverageProfile`
+     - `TaskDetail.tsx` 中 `task.coverageStrategy` → `task.coverageProfile`
+  3. **枚举值修复**:
+     - `CoverageStrategy.CORE` → `CoverageStrategy.SMOKE`
+- **修复文件**: 
+  - `frontend/src/modules/tasks/TaskDetail.tsx` - 按钮条件、字段名、枚举引用
+  - `frontend/src/types/task.ts` - Task 接口字段名
+- **修复状态**: ✅ 已修复
+- **验证状态**: ⏳ 待用户刷新前端验证
+- **修复时间**: 2025-11-05 17:08
 

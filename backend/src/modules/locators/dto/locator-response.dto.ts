@@ -61,4 +61,3 @@ export class LocatorCandidateResponseDto {
     return typeof value === 'object' ? parseFloat(value.toString()) : Number(value);
   }
 }
-

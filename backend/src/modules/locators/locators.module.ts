@@ -12,16 +12,7 @@ import { PrismaModule } from '../common/prisma/prisma.module';
 @Module({
   imports: [PrismaModule],
   controllers: [LocatorsController],
-  providers: [
-    LocatorsService,
-    LocatorGeneratorService,
-    LocatorValidatorService,
-  ],
-  exports: [
-    LocatorsService,
-    LocatorGeneratorService,
-    LocatorValidatorService,
-  ],
+  providers: [LocatorsService, LocatorGeneratorService, LocatorValidatorService],
+  exports: [LocatorsService, LocatorGeneratorService, LocatorValidatorService],
 })
 export class LocatorsModule {}
-

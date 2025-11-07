@@ -41,7 +41,7 @@ export class DevicesService {
 
     // 校验设备是否在线（ADB验证）
     const isOnline = await this.adbService.isDeviceOnline(serialNumber);
-    
+
     if (!isOnline) {
       this.logger.warn(`Device ${serialNumber} is offline, marking as OFFLINE`);
     }
@@ -172,7 +172,7 @@ export class DevicesService {
 
     // 字段映射：DTO -> Prisma
     const updateData: any = {};
-    
+
     if (updateDeviceDto.serialNumber !== undefined) {
       updateData.serial = updateDeviceDto.serialNumber;
     }
@@ -274,16 +274,18 @@ export class DevicesService {
    * 扫描连接的设备
    * 调用 ADB 获取所有连接设备的详细信息
    */
-  async scanDevices(): Promise<Array<{
-    serialNumber: string;
-    model: string;
-    androidVersion: string;
-    resolution: string | null;
-    type: string;
-    status: string;
-    manufacturer: string | null;
-    isExisting: boolean;
-  }>> {
+  async scanDevices(): Promise<
+    Array<{
+      serialNumber: string;
+      model: string;
+      androidVersion: string;
+      resolution: string | null;
+      type: string;
+      status: string;
+      manufacturer: string | null;
+      isExisting: boolean;
+    }>
+  > {
     this.logger.log('Scanning connected devices...');
 
     // 获取连接的设备信息
@@ -309,7 +311,9 @@ export class DevicesService {
       }),
     );
 
-    this.logger.log(`Scanned ${deviceInfos.length} devices, ${deviceInfos.filter(d => !d.isExisting).length} are new`);
+    this.logger.log(
+      `Scanned ${deviceInfos.length} devices, ${deviceInfos.filter((d) => !d.isExisting).length} are new`,
+    );
 
     return deviceInfos;
   }
@@ -374,4 +378,3 @@ export class DevicesService {
     };
   }
 }
-

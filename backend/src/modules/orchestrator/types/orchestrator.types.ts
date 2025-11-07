@@ -1,3 +1,5 @@
+import { VisionSnapshot } from '../../common/types/vision.types';
+
 /**
  * Orchestrator 类型定义
  * 实现功能 C：遍历调度状态机（FR-02）
@@ -126,6 +128,20 @@ export interface TaskRunContext {
   packageName: string;
   /** 应用版本 */
   versionName: string;
+  /** 应用版本ID */
+  appVersionId: string;
+  /** Appium 会话 ID */
+  appiumSessionId?: string;
+  /** 当前界面数据 */
+  currentScreen?: {
+    screenId: string;
+    signature: string;
+    screenshotPath: string;
+    screenshotPublicUrl?: string;
+    domPath: string;
+    domJson?: any;
+    visionSummary?: VisionSnapshot;
+  };
   /** 覆盖配置 */
   coverageConfig: {
     /** 黑名单路径 */
@@ -177,4 +193,3 @@ export interface StateTransitionResult {
   /** 附加数据 */
   data?: any;
 }
-

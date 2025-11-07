@@ -83,13 +83,15 @@ export class AppVersionsController {
     @Query('appId') appId?: string,
     @Query('page') page?: number,
     @Query('limit') limit?: number,
-  ): Promise<BaseResponseDto<{
-    items: AppVersionResponseDto[];
-    total: number;
-    page: number;
-    limit: number;
-    totalPages: number;
-  }>> {
+  ): Promise<
+    BaseResponseDto<{
+      items: AppVersionResponseDto[];
+      total: number;
+      page: number;
+      limit: number;
+      totalPages: number;
+    }>
+  > {
     const result = appId
       ? await this.appVersionsService.findByAppId(appId, { page, limit })
       : await this.appVersionsService.findAll({ page, limit });
@@ -148,4 +150,3 @@ export class AppVersionsController {
     await this.appVersionsService.remove(id);
   }
 }
-

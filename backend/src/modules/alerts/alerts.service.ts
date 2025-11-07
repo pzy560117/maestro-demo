@@ -2,12 +2,7 @@ import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { NotificationService } from './services/notification.service';
 import { EventsGateway } from '../websocket/websocket.gateway';
-import {
-  CreateAlertDto,
-  AcknowledgeAlertDto,
-  QueryAlertDto,
-  SendNotificationDto,
-} from './dto';
+import { CreateAlertDto, AcknowledgeAlertDto, QueryAlertDto, SendNotificationDto } from './dto';
 import { Alert, AlertStatus, AlertSeverity, Prisma } from '@prisma/client';
 
 /**
@@ -30,9 +25,7 @@ export class AlertsService {
    * 验收标准：告警触发 → 写入 alerts
    */
   async create(createAlertDto: CreateAlertDto): Promise<Alert> {
-    this.logger.log(
-      `Creating alert: ${createAlertDto.alertType} - ${createAlertDto.message}`,
-    );
+    this.logger.log(`Creating alert: ${createAlertDto.alertType} - ${createAlertDto.message}`);
 
     const alert = await this.prisma.alert.create({
       data: {
@@ -199,10 +192,7 @@ export class AlertsService {
    * 确认告警
    * 验收标准：确认后状态变为 ACKED
    */
-  async acknowledge(
-    id: string,
-    ackDto: AcknowledgeAlertDto,
-  ): Promise<Alert> {
+  async acknowledge(id: string, ackDto: AcknowledgeAlertDto): Promise<Alert> {
     this.logger.log(`Acknowledging alert: ${id}`);
 
     const alert = await this.prisma.alert.update({
@@ -329,14 +319,20 @@ export class AlertsService {
       acked,
       resolved,
       critical,
-      bySeverity: bySeverity.reduce((acc, item) => {
-        acc[item.severity] = item._count.severity;
-        return acc;
-      }, {} as Record<string, number>),
-      byType: byType.reduce((acc, item) => {
-        acc[item.alertType] = item._count.alertType;
-        return acc;
-      }, {} as Record<string, number>),
+      bySeverity: bySeverity.reduce(
+        (acc, item) => {
+          acc[item.severity] = item._count.severity;
+          return acc;
+        },
+        {} as Record<string, number>,
+      ),
+      byType: byType.reduce(
+        (acc, item) => {
+          acc[item.alertType] = item._count.alertType;
+          return acc;
+        },
+        {} as Record<string, number>,
+      ),
     };
   }
 
@@ -348,9 +344,7 @@ export class AlertsService {
     // 获取告警通知配置
     const config = await this.getNotificationConfig(alert.severity);
     if (!config || !config.enabled) {
-      this.logger.debug(
-        `Auto notification disabled for severity: ${alert.severity}`,
-      );
+      this.logger.debug(`Auto notification disabled for severity: ${alert.severity}`);
       return;
     }
 
@@ -398,10 +392,7 @@ export class AlertsService {
     const targets: Array<{ channel: any; address: string }> = [];
     for (const config of configs) {
       const configData = config.config as any;
-      if (
-        !configData.severities ||
-        configData.severities.includes(severity)
-      ) {
+      if (!configData.severities || configData.severities.includes(severity)) {
         targets.push({
           channel: configData.channel,
           address: configData.target,
@@ -415,4 +406,3 @@ export class AlertsService {
     };
   }
 }
-

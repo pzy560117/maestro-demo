@@ -12,23 +12,18 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
-import {
-  ApiTags,
-  ApiOperation,
-  ApiResponse,
-  ApiParam,
-  ApiQuery,
-} from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiQuery } from '@nestjs/swagger';
 import { TasksService } from './tasks.service';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
 import { TaskResponseDto } from './dto/task-response.dto';
+import { BaseResponseDto } from '../common/dto/base-response.dto';
 import { TaskStatus } from '@prisma/client';
 
 /**
  * 任务管理控制器
  * 实现功能 B：遍历任务创建与管理（FR-01）
- * 
+ *
  * 遵循 REST API 规范：
  * - POST /tasks - 创建任务
  * - GET /tasks - 查询任务列表
@@ -44,7 +39,7 @@ export class TasksController {
 
   /**
    * 创建遍历任务
-   * 
+   *
    * 验收标准：
    * - API POST /tasks 返回 201 + 任务 ID
    * - 创建成功后状态为 QUEUED
@@ -70,8 +65,9 @@ export class TasksController {
     description: '应用版本或设备不存在',
   })
   @HttpCode(HttpStatus.CREATED)
-  async create(@Body() createTaskDto: CreateTaskDto): Promise<TaskResponseDto> {
-    return this.tasksService.create(createTaskDto);
+  async create(@Body() createTaskDto: CreateTaskDto): Promise<BaseResponseDto<TaskResponseDto>> {
+    const task = await this.tasksService.create(createTaskDto);
+    return BaseResponseDto.success(task, '任务创建成功');
   }
 
   /**
@@ -86,15 +82,18 @@ export class TasksController {
     status: HttpStatus.OK,
     description: '任务统计信息',
   })
-  async getStats(): Promise<{
-    total: number;
-    running: number;
-    queued: number;
-    succeeded: number;
-    failed: number;
-    cancelled: number;
-  }> {
-    return this.tasksService.getStats();
+  async getStats(): Promise<
+    BaseResponseDto<{
+      total: number;
+      running: number;
+      queued: number;
+      succeeded: number;
+      failed: number;
+      cancelled: number;
+    }>
+  > {
+    const stats = await this.tasksService.getStats();
+    return BaseResponseDto.success(stats, '查询成功');
   }
 
   /**
@@ -119,8 +118,9 @@ export class TasksController {
   })
   async getPendingTasks(
     @Query('limit', new ParseIntPipe({ optional: true })) limit?: number,
-  ): Promise<TaskResponseDto[]> {
-    return this.tasksService.getPendingTasks(limit);
+  ): Promise<BaseResponseDto<TaskResponseDto[]>> {
+    const tasks = await this.tasksService.getPendingTasks(limit);
+    return BaseResponseDto.success(tasks, '查询成功');
   }
 
   /**
@@ -174,19 +174,75 @@ export class TasksController {
     @Query('appVersionId') appVersionId?: string,
     @Query('page') page?: number,
     @Query('limit') limit?: number,
-  ): Promise<{
-    items: TaskResponseDto[];
-    total: number;
-    page: number;
-    limit: number;
-    totalPages: number;
-  }> {
-    return this.tasksService.findAll({
+  ): Promise<
+    BaseResponseDto<{
+      items: TaskResponseDto[];
+      total: number;
+      page: number;
+      limit: number;
+      totalPages: number;
+    }>
+  > {
+    const result = await this.tasksService.findAll({
       status,
       appVersionId,
       page,
       limit,
     });
+    return BaseResponseDto.success(result, '查询成功');
+  }
+
+  /**
+   * 获取任务的运行记录
+   * 注意：必须放在 @Get(':id') 之前，避免路由冲突
+   */
+  @Get(':id/runs')
+  @ApiOperation({
+    summary: '获取任务的运行记录',
+    description: '获取指定任务的所有运行记录，包括设备信息和执行结果',
+  })
+  @ApiParam({
+    name: 'id',
+    type: String,
+    description: '任务ID',
+  })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: '任务运行记录列表',
+    schema: {
+      type: 'object',
+      properties: {
+        code: { type: 'number', example: 0 },
+        message: { type: 'string', example: '查询成功' },
+        data: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              id: { type: 'string' },
+              taskId: { type: 'string' },
+              deviceId: { type: 'string' },
+              device: { type: 'object' },
+              status: { type: 'string' },
+              startAt: { type: 'string' },
+              endAt: { type: 'string', nullable: true },
+              totalActions: { type: 'number' },
+              successfulActions: { type: 'number' },
+              coverageScreens: { type: 'number' },
+              failureReason: { type: 'string', nullable: true },
+            },
+          },
+        },
+      },
+    },
+  })
+  @ApiResponse({
+    status: HttpStatus.NOT_FOUND,
+    description: '任务不存在',
+  })
+  async getTaskRuns(@Param('id', ParseUUIDPipe) id: string): Promise<BaseResponseDto<any[]>> {
+    const runs = await this.tasksService.getTaskRuns(id);
+    return BaseResponseDto.success(runs, '查询成功');
   }
 
   /**
@@ -211,10 +267,9 @@ export class TasksController {
     status: HttpStatus.NOT_FOUND,
     description: '任务不存在',
   })
-  async findOne(
-    @Param('id', ParseUUIDPipe) id: string,
-  ): Promise<TaskResponseDto> {
-    return this.tasksService.findOne(id);
+  async findOne(@Param('id', ParseUUIDPipe) id: string): Promise<BaseResponseDto<TaskResponseDto>> {
+    const task = await this.tasksService.findOne(id);
+    return BaseResponseDto.success(task, '查询成功');
   }
 
   /**
@@ -246,8 +301,9 @@ export class TasksController {
   async update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() updateTaskDto: UpdateTaskDto,
-  ): Promise<TaskResponseDto> {
-    return this.tasksService.update(id, updateTaskDto);
+  ): Promise<BaseResponseDto<TaskResponseDto>> {
+    const task = await this.tasksService.update(id, updateTaskDto);
+    return BaseResponseDto.success(task, '任务更新成功');
   }
 
   /**
@@ -307,10 +363,40 @@ export class TasksController {
     status: HttpStatus.NOT_FOUND,
     description: '任务不存在',
   })
-  async cancel(
-    @Param('id', ParseUUIDPipe) id: string,
-  ): Promise<TaskResponseDto> {
-    return this.tasksService.cancel(id);
+  async cancel(@Param('id', ParseUUIDPipe) id: string): Promise<BaseResponseDto<TaskResponseDto>> {
+    const task = await this.tasksService.cancel(id);
+    return BaseResponseDto.success(task, '任务已取消');
+  }
+
+  /**
+   * 重试任务
+   */
+  @Post(':id/retry')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: '重试任务',
+    description: '重新执行失败或取消的任务',
+  })
+  @ApiParam({
+    name: 'id',
+    type: String,
+    description: '任务ID',
+  })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: '任务已加入队列',
+    type: TaskResponseDto,
+  })
+  @ApiResponse({
+    status: HttpStatus.BAD_REQUEST,
+    description: '任务状态不允许重试',
+  })
+  @ApiResponse({
+    status: HttpStatus.NOT_FOUND,
+    description: '任务不存在',
+  })
+  async retry(@Param('id', ParseUUIDPipe) id: string): Promise<BaseResponseDto<TaskResponseDto>> {
+    const task = await this.tasksService.retry(id);
+    return BaseResponseDto.success(task, '任务已加入队列');
   }
 }
-

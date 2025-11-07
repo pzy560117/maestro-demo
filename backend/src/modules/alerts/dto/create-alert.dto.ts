@@ -64,4 +64,3 @@ export class CreateAlertDto {
   @IsObject()
   payload?: Record<string, any>;
 }
-

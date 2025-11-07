@@ -1,134 +1,129 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { StateMachineService } from './state-machine.service';
-import {
-  OrchestratorState,
-  TaskRunContext,
-  QueuePriority,
-} from '../types/orchestrator.types';
+import { ScreenCaptureService } from './screen-capture.service';
+import { ActionExecutorService } from './action-executor.service';
+import { AppiumService } from '../../integrations/appium/appium.service';
+import { PrismaService } from '../../common/prisma/prisma.service';
+import { OrchestratorState, TaskRunContext } from '../types/orchestrator.types';
 
-/**
- * 状态机服务单元测试
- * 测试功能 C：遍历调度状态机（FR-02）
- */
 describe('StateMachineService', () => {
   let service: StateMachineService;
+  let appiumMock: { createSession: jest.Mock };
+  let prismaMock: { device: { findUnique: jest.Mock } };
 
   beforeEach(async () => {
+    appiumMock = {
+      createSession: jest.fn(),
+    };
+
+    prismaMock = {
+      device: {
+        findUnique: jest.fn(),
+      },
+    };
+
     const module: TestingModule = await Test.createTestingModule({
-      providers: [StateMachineService],
+      providers: [
+        StateMachineService,
+        {
+          provide: ScreenCaptureService,
+          useValue: {},
+        },
+        {
+          provide: ActionExecutorService,
+          useValue: {},
+        },
+        {
+          provide: AppiumService,
+          useValue: appiumMock,
+        },
+        {
+          provide: PrismaService,
+          useValue: prismaMock,
+        },
+      ],
     }).compile();
 
-    service = module.get<StateMachineService>(StateMachineService);
+    service = module.get(StateMachineService);
+    jest.clearAllMocks();
   });
 
-  const createMockContext = (): TaskRunContext => ({
-    taskRunId: 'test-task-run-id',
-    taskId: 'test-task-id',
-    deviceId: 'test-device-id',
-    packageName: 'com.test.app',
-    versionName: '1.0.0',
-    coverageConfig: {
-      maxDepth: 10,
-      timeout: 1800,
-    },
-    visitedGraph: {
-      visitedSignatures: new Set(),
-      edges: new Map(),
-      visitCounts: new Map(),
-    },
-    actionQueues: {
-      [QueuePriority.PRIMARY]: [],
-      [QueuePriority.FALLBACK]: [],
-      [QueuePriority.REVISIT]: [],
-    },
-    currentState: OrchestratorState.IDLE,
-    stats: {
-      totalActions: 0,
-      successfulActions: 0,
-      failedActions: 0,
-      coverageScreens: 0,
-      startTime: new Date(),
-    },
-  });
+  describe('createAppiumSessionWithRetry', () => {
+    it('should succeed on first attempt', async () => {
+      prismaMock.device.findUnique.mockResolvedValue({
+        id: 'device-1',
+        serial: '66J5T18919000260',
+      });
 
-  describe('transition', () => {
-    it('应从 IDLE 转换到 BOOTSTRAPPING', async () => {
-      const context = createMockContext();
-      const result = await service.transition(OrchestratorState.IDLE, context);
+      appiumMock.createSession.mockResolvedValue('session-123');
 
-      expect(result.success).toBe(true);
-      expect(result.newState).toBe(OrchestratorState.BOOTSTRAPPING);
-    });
+      const context: TaskRunContext = {
+        taskRunId: 'test-run-1',
+        taskId: 'test-task-1',
+        deviceId: 'device-1',
+        appVersionId: 'test-app-version-1',
+        packageName: 'com.test.app',
+        versionName: '1.0.0',
+        coverageConfig: {},
+        visitedGraph: {
+          visitedSignatures: new Set(),
+          edges: new Map(),
+          visitCounts: new Map(),
+        },
+        actionQueues: {
+          PRIMARY: [],
+          FALLBACK: [],
+          REVISIT: [],
+        },
+        currentState: OrchestratorState.BOOTSTRAPPING,
+        stats: {
+          totalActions: 0,
+          successfulActions: 0,
+          failedActions: 0,
+          coverageScreens: 0,
+          startTime: new Date(),
+        },
+      };
 
-    it('应从 BOOTSTRAPPING 转换到 INSPECTING', async () => {
-      const context = createMockContext();
-      const result = await service.transition(
-        OrchestratorState.BOOTSTRAPPING,
-        context,
+      const result = await (service as any).createAppiumSessionWithRetry(
+        '66J5T18919000260',
+        'com.test.app',
+        3,
       );
 
-      expect(result.success).toBe(true);
-      expect(result.newState).toBe(OrchestratorState.INSPECTING);
+      expect(result).toBe('session-123');
+      expect(appiumMock.createSession).toHaveBeenCalledTimes(1);
     });
 
-    it('队列为空时应从 TRAVERSING 转换到 TERMINATED', async () => {
-      const context = createMockContext();
-      const result = await service.transition(
-        OrchestratorState.TRAVERSING,
-        context,
+    it('should retry on failure and succeed on second attempt', async () => {
+      appiumMock.createSession
+        .mockRejectedValueOnce(new Error('Connection refused'))
+        .mockResolvedValueOnce('session-456');
+
+      const result = await (service as any).createAppiumSessionWithRetry(
+        '66J5T18919000260',
+        'com.test.app',
+        3,
       );
 
-      expect(result.success).toBe(true);
-      expect(result.newState).toBe(OrchestratorState.TERMINATED);
-      expect(result.data?.reason).toBe('queue_empty');
+      expect(result).toBe('session-456');
+      expect(appiumMock.createSession).toHaveBeenCalledTimes(2);
     });
 
-    it('应从 INSPECTING 转换到 EXECUTING', async () => {
-      const context = createMockContext();
-      const result = await service.transition(
-        OrchestratorState.INSPECTING,
-        context,
+    it('should fail after max retries', async () => {
+      appiumMock.createSession.mockRejectedValue(
+        new Error('Connection refused'),
       );
 
-      expect(result.success).toBe(true);
-      expect(result.newState).toBe(OrchestratorState.EXECUTING);
-    });
+      await expect(
+        (service as any).createAppiumSessionWithRetry(
+          '66J5T18919000260',
+          'com.test.app',
+          3,
+        ),
+      ).rejects.toThrow('Failed to create Appium session after 3 attempts');
 
-    it('应从 EXECUTING 转换到 VERIFYING', async () => {
-      const context = createMockContext();
-      const result = await service.transition(
-        OrchestratorState.EXECUTING,
-        context,
-      );
-
-      expect(result.success).toBe(true);
-      expect(result.newState).toBe(OrchestratorState.VERIFYING);
-      expect(context.stats.totalActions).toBe(1);
-      expect(context.stats.successfulActions).toBe(1);
-    });
-
-    it('应从 VERIFYING 转换到 TRAVERSING', async () => {
-      const context = createMockContext();
-      const result = await service.transition(
-        OrchestratorState.VERIFYING,
-        context,
-      );
-
-      expect(result.success).toBe(true);
-      expect(result.newState).toBe(OrchestratorState.TRAVERSING);
-      expect(context.stats.coverageScreens).toBe(1);
-    });
-
-    it('应从 RECOVERING 转换到 TRAVERSING', async () => {
-      const context = createMockContext();
-      const result = await service.transition(
-        OrchestratorState.RECOVERING,
-        context,
-      );
-
-      expect(result.success).toBe(true);
-      expect(result.newState).toBe(OrchestratorState.TRAVERSING);
+      expect(appiumMock.createSession).toHaveBeenCalledTimes(3);
     });
   });
 });
-

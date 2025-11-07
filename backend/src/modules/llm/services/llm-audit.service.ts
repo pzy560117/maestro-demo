@@ -8,7 +8,7 @@ import * as path from 'path';
 /**
  * LLM 审计日志服务
  * 实现功能 J：LLM 审计日志（FR-13, Iteration 3）
- * 
+ *
  * 验收标准：
  * 1. llm_logs 含 request/response JSON、tokens、latency
  * 2. 支持下载指定时间范围日志
@@ -135,13 +135,7 @@ export class LlmAuditService {
       };
     }
 
-    const [
-      total,
-      byModel,
-      errorCount,
-      avgLatency,
-      totalTokens,
-    ] = await Promise.all([
+    const [total, byModel, errorCount, avgLatency, totalTokens] = await Promise.all([
       this.prisma.llmLog.count({ where }),
       this.prisma.llmLog.groupBy({
         by: ['modelName'],
@@ -171,13 +165,14 @@ export class LlmAuditService {
       avgLatencyMs: avgLatency._avg.latencyMs || 0,
       totalPromptTokens: totalTokens._sum.promptTokens || 0,
       totalCompletionTokens: totalTokens._sum.completionTokens || 0,
-      totalTokens:
-        (totalTokens._sum.promptTokens || 0) +
-        (totalTokens._sum.completionTokens || 0),
-      byModel: byModel.reduce((acc, item) => {
-        acc[item.modelName] = item._count.modelName;
-        return acc;
-      }, {} as Record<string, number>),
+      totalTokens: (totalTokens._sum.promptTokens || 0) + (totalTokens._sum.completionTokens || 0),
+      byModel: byModel.reduce(
+        (acc, item) => {
+          acc[item.modelName] = item._count.modelName;
+          return acc;
+        },
+        {} as Record<string, number>,
+      ),
     };
   }
 
@@ -210,9 +205,7 @@ export class LlmAuditService {
       await fs.writeFile(filePath, csv, 'utf-8');
     }
 
-    this.logger.log(
-      `Exported ${items.length} LLM logs to ${filePath}`,
-    );
+    this.logger.log(`Exported ${items.length} LLM logs to ${filePath}`);
 
     return {
       filePath,
@@ -305,12 +298,9 @@ export class LlmAuditService {
     // 组合为 CSV
     const csvLines = [
       headers.join(','),
-      ...rows.map((row) =>
-        row.map((cell) => `"${cell}"`).join(','),
-      ),
+      ...rows.map((row) => row.map((cell) => `"${cell}"`).join(',')),
     ];
 
     return csvLines.join('\n');
   }
 }
-

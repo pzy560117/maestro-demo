@@ -20,9 +20,7 @@ import { Logger } from '@nestjs/common';
   },
   namespace: '/events',
 })
-export class EventsGateway
-  implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect
-{
+export class EventsGateway implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
   server!: Server;
 
@@ -119,4 +117,3 @@ export class EventsGateway
     this.logger.debug(`Event emitted to room ${room}: ${event}`);
   }
 }
-

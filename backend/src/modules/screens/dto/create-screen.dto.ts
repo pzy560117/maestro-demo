@@ -22,7 +22,11 @@ export class ElementInfoDto {
   @IsNotEmpty()
   elementType!: string;
 
-  @ApiProperty({ description: 'Resource ID', required: false, example: 'com.example:id/submit_button' })
+  @ApiProperty({
+    description: 'Resource ID',
+    required: false,
+    example: 'com.example:id/submit_button',
+  })
   @IsOptional()
   @IsString()
   resourceId?: string;
@@ -68,15 +72,32 @@ export class CreateScreenDto {
   @IsNotEmpty()
   appVersionId!: string;
 
-  @ApiProperty({ description: '截图路径（相对路径或URL）', example: 'screenshots/2024-01/screen_abc123.webp' })
+  @ApiProperty({
+    description: '截图路径（相对路径或URL）',
+    example: 'screenshots/2024-01/screen_abc123.webp',
+  })
   @IsString()
   @IsNotEmpty()
   screenshotPath!: string;
 
-  @ApiProperty({ description: '缩略图路径', required: false, example: 'screenshots/2024-01/thumb_abc123.webp' })
+  @ApiProperty({
+    description: '缩略图路径',
+    required: false,
+    example: 'screenshots/2024-01/thumb_abc123.webp',
+  })
   @IsOptional()
   @IsString()
   screenshotThumbPath?: string;
+
+  @ApiProperty({
+    description: '截图预签名访问地址',
+    required: false,
+    example:
+      'https://minio.example.com/maestro-screenshots/2024-01/screen_abc123.webp?X-Amz-Expires=300',
+  })
+  @IsOptional()
+  @IsString()
+  screenshotPublicUrl?: string;
 
   @ApiProperty({ description: 'DOM JSON 路径', example: 'dom/2024-01/dom_abc123.json' })
   @IsString()
@@ -128,4 +149,3 @@ export class CreateScreenDto {
   @Type(() => ElementInfoDto)
   elements?: ElementInfoDto[];
 }
-

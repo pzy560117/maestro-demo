@@ -31,13 +31,8 @@ export class ScreenDiffService {
    * 2. 差异超阈值触发告警
    * 3. 支持导出 diff 报告
    */
-  async compareScreens(
-    baseScreenId: string,
-    targetScreenId: string,
-  ): Promise<ScreenDiff> {
-    this.logger.log(
-      `Comparing screens: base=${baseScreenId}, target=${targetScreenId}`,
-    );
+  async compareScreens(baseScreenId: string, targetScreenId: string): Promise<ScreenDiff> {
+    this.logger.log(`Comparing screens: base=${baseScreenId}, target=${targetScreenId}`);
 
     // 获取两个界面的元素
     const [baseScreen, targetScreen] = await Promise.all([
@@ -52,21 +47,14 @@ export class ScreenDiffService {
     ]);
 
     if (!baseScreen) {
-      throw new NotFoundException(
-        `Base screen with ID ${baseScreenId} not found`,
-      );
+      throw new NotFoundException(`Base screen with ID ${baseScreenId} not found`);
     }
     if (!targetScreen) {
-      throw new NotFoundException(
-        `Target screen with ID ${targetScreenId} not found`,
-      );
+      throw new NotFoundException(`Target screen with ID ${targetScreenId} not found`);
     }
 
     // 计算差异
-    const diffSummary = this.calculateDiff(
-      baseScreen.elements,
-      targetScreen.elements,
-    );
+    const diffSummary = this.calculateDiff(baseScreen.elements, targetScreen.elements);
 
     // 生成详细差异报告
     const diffDetailPath = await this.generateDiffDetailFile(
@@ -108,12 +96,8 @@ export class ScreenDiffService {
    */
   private calculateDiff(baseElements: any[], targetElements: any[]): any {
     // 构建元素映射（基于 elementHash）
-    const baseMap = new Map(
-      baseElements.map((e) => [e.elementHash, e]),
-    );
-    const targetMap = new Map(
-      targetElements.map((e) => [e.elementHash, e]),
-    );
+    const baseMap = new Map(baseElements.map((e) => [e.elementHash, e]));
+    const targetMap = new Map(targetElements.map((e) => [e.elementHash, e]));
 
     // 计算新增、删除、修改的元素
     const added: any[] = [];
@@ -159,9 +143,7 @@ export class ScreenDiffService {
     // 计算变化率
     const totalElements = baseElements.length;
     const changeRate =
-      totalElements > 0
-        ? (added.length + removed.length + modified.length) / totalElements
-        : 0;
+      totalElements > 0 ? (added.length + removed.length + modified.length) / totalElements : 0;
 
     return {
       totalBase: baseElements.length,
@@ -183,13 +165,7 @@ export class ScreenDiffService {
    */
   private isElementModified(baseElement: any, targetElement: any): boolean {
     // 检查关键属性是否变化
-    const keyProps = [
-      'textValue',
-      'contentDesc',
-      'visibility',
-      'interactable',
-      'bounds',
-    ];
+    const keyProps = ['textValue', 'contentDesc', 'visibility', 'interactable', 'bounds'];
 
     for (const prop of keyProps) {
       if (JSON.stringify(baseElement[prop]) !== JSON.stringify(targetElement[prop])) {
@@ -206,13 +182,7 @@ export class ScreenDiffService {
   private getElementChanges(baseElement: any, targetElement: any): any {
     const changes: any = {};
 
-    const props = [
-      'textValue',
-      'contentDesc',
-      'visibility',
-      'interactable',
-      'bounds',
-    ];
+    const props = ['textValue', 'contentDesc', 'visibility', 'interactable', 'bounds'];
 
     for (const prop of props) {
       const baseValue = baseElement[prop];
@@ -298,19 +268,14 @@ export class ScreenDiffService {
         },
       });
 
-      this.logger.warn(
-        `Alert triggered for screen diff: ${screenDiff.id}, severity: ${severity}`,
-      );
+      this.logger.warn(`Alert triggered for screen diff: ${screenDiff.id}, severity: ${severity}`);
     }
   }
 
   /**
    * 查询差异记录
    */
-  async findDiff(
-    baseScreenId: string,
-    targetScreenId: string,
-  ): Promise<ScreenDiff | null> {
+  async findDiff(baseScreenId: string, targetScreenId: string): Promise<ScreenDiff | null> {
     return this.prisma.screenDiff.findUnique({
       where: {
         baseScreenId_targetScreenId: {
@@ -410,4 +375,3 @@ export class ScreenDiffService {
     };
   }
 }
-

@@ -1,10 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { LlmRequest } from '../types/llm.types';
+import { VisionSnapshot, VisionElementSummary } from '../../common/types/vision.types';
 
 /**
  * Prompt 构建器服务
  * 实现功能 D：LLM 指令生成（FR-03）
- * 
+ *
  * 职责：
  * 1. 组装 system/user/context 提示词
  * 2. 控制 token 数量在限制范围内
@@ -116,6 +117,13 @@ export class PromptBuilderService {
       sections.push('');
     }
 
+    // 4.1 视觉摘要（如果提供）
+    if (request.visionSummary && request.visionSummary.elements.length > 0) {
+      sections.push(`## 视觉摘要`);
+      sections.push(this.summarizeVision(request.visionSummary));
+      sections.push('');
+    }
+
     // 5. 指令
     sections.push(`## 任务`);
     sections.push(
@@ -139,16 +147,12 @@ export class PromptBuilderService {
    * 提取关键元素信息，减少 token 消耗
    */
   private summarizeDom(domJson: any): string {
-    // TODO: 实现更智能的 DOM 摘要算法
-    // 目前简单返回 JSON 字符串（实际应过滤无用节点、压缩属性）
-
     const summary: string[] = [];
     summary.push('```json');
 
     try {
-      // 简化 DOM，仅保留关键属性
-      const simplified = this.simplifyDomNode(domJson);
-      summary.push(JSON.stringify(simplified, null, 2));
+      const domSummary = this.buildDomSummary(domJson);
+      summary.push(JSON.stringify(domSummary, null, 2));
     } catch (error) {
       const err = error as Error;
       this.logger.warn(`Failed to summarize DOM: ${err.message}`);
@@ -161,43 +165,209 @@ export class PromptBuilderService {
   }
 
   /**
+   * 总结视觉要素
+   */
+  private summarizeVision(snapshot: VisionSnapshot): string {
+    const summary: Record<string, any> = {
+      provider: snapshot.provider,
+      analyzedAt: snapshot.analyzedAt,
+      totalElements: snapshot.totalElements,
+      sampledElements: this.selectVisionElements(snapshot.elements),
+    };
+
+    return ['```json', JSON.stringify(summary, null, 2), '```'].join('\n');
+  }
+
+  /**
+   * 选择代表性视觉元素
+   */
+  private selectVisionElements(elements: VisionElementSummary[]): any[] {
+    const maxItems = 12;
+    return elements.slice(0, maxItems).map((el) => {
+      const item: Record<string, any> = {};
+
+      if (el.type) {
+        item.type = el.type;
+      }
+      if (el.text) {
+        item.text = this.normalizeVisionText(el.text);
+      }
+      if (el.bbox) {
+        item.bbox = el.bbox;
+      }
+      if (typeof el.confidence === 'number') {
+        item.confidence = Number(el.confidence.toFixed(3));
+      }
+
+      return item;
+    });
+  }
+
+  /**
+   * 视觉文本裁剪
+   */
+  private normalizeVisionText(text: string): string {
+    const trimmed = text.trim();
+    const maxLength = 60;
+    return trimmed.length > maxLength ? `${trimmed.slice(0, maxLength)}...` : trimmed;
+  }
+
+  /**
    * 简化 DOM 节点
    * 仅保留关键信息
    */
-  private simplifyDomNode(node: any): any {
-    if (!node || typeof node !== 'object') {
-      return node;
+  private buildDomSummary(domJson: any): Record<string, any> {
+    /**
+     * DOM 摘要结构体
+     */
+    interface DomSummary {
+      totalNodes: number;
+      clickableCount: number;
+      textNodeCount: number;
+      keyElements: Array<Record<string, any>>;
     }
 
-    const simplified: any = {
-      type: node.class || node.type || 'Unknown',
+    const summary: DomSummary = {
+      totalNodes: 0,
+      clickableCount: 0,
+      textNodeCount: 0,
+      keyElements: [],
     };
 
-    // 保留关键属性
-    if (node['resource-id']) {
-      simplified.id = node['resource-id'];
-    }
-    if (node.text) {
-      simplified.text = node.text;
-    }
-    if (node['content-desc']) {
-      simplified.desc = node['content-desc'];
-    }
-    if (node.clickable === 'true' || node.clickable === true) {
-      simplified.clickable = true;
-    }
-    if (node.bounds) {
-      simplified.bounds = node.bounds;
+    const maxDepth = 4;
+    const maxChildrenPerNode = 6;
+    const maxKeyElements = 50;
+
+    const queue: Array<{ node: any; depth: number; path: string[] }> = [];
+    queue.push({ node: domJson, depth: 0, path: [] });
+
+    while (queue.length > 0) {
+      const current = queue.shift();
+      if (!current) {
+        continue;
+      }
+
+      const { node, depth, path } = current;
+
+      if (!node || typeof node !== 'object') {
+        continue;
+      }
+
+      summary.totalNodes += 1;
+
+      const type = (node.class || node.type || 'Unknown') as string;
+      const resourceId = this.normalizeText(node['resource-id']);
+      const text = this.normalizeText(node.text);
+      const contentDesc = this.normalizeText(node['content-desc']);
+      const clickable = this.isTruthy(node.clickable);
+
+      if (text) {
+        summary.textNodeCount += 1;
+      }
+      if (clickable) {
+        summary.clickableCount += 1;
+      }
+
+      const isInput = this.isInputNode(type, node);
+      const useful = clickable || isInput || !!resourceId || !!text || !!contentDesc;
+
+      if (useful && summary.keyElements.length < maxKeyElements) {
+        const elementSummary: Record<string, any> = {
+          path: this.buildDomPath(path, type),
+          type,
+          depth,
+        };
+
+        if (resourceId) {
+          elementSummary.id = resourceId;
+        }
+        if (text) {
+          elementSummary.text = text;
+        }
+        if (contentDesc) {
+          elementSummary.desc = contentDesc;
+        }
+        if (clickable) {
+          elementSummary.clickable = true;
+        }
+        if (node.bounds) {
+          elementSummary.bounds = node.bounds;
+        }
+        if (isInput) {
+          elementSummary.input = true;
+        }
+
+        summary.keyElements.push(elementSummary);
+      }
+
+      if (depth >= maxDepth) {
+        continue;
+      }
+
+      const children = Array.isArray(node.children) ? node.children : [];
+      for (let i = 0; i < children.length && i < maxChildrenPerNode; i += 1) {
+        queue.push({
+          node: children[i],
+          depth: depth + 1,
+          path: [...path, type],
+        });
+      }
     }
 
-    // 递归处理子节点（限制深度）
-    if (node.children && Array.isArray(node.children)) {
-      simplified.children = node.children
-        .slice(0, 10) // 最多保留 10 个子节点
-        .map((child: any) => this.simplifyDomNode(child));
+    return summary;
+  }
+
+  /**
+   * 构建 DOM 路径字符串
+   */
+  private buildDomPath(path: string[], currentType: string): string {
+    const fullPath = [...path, currentType];
+    return fullPath.slice(-5).join(' > ');
+  }
+
+  /**
+   * 判断节点是否可视为输入组件
+   */
+  private isInputNode(type: string, node: any): boolean {
+    const lowered = type.toLowerCase();
+    return (
+      lowered.includes('edittext') ||
+      lowered.includes('input') ||
+      this.isTruthy(node.focusable) ||
+      this.isTruthy(node.password)
+    );
+  }
+
+  /**
+   * 归一化文本内容，去除空白并限制长度
+   */
+  private normalizeText(value: any): string | undefined {
+    if (typeof value !== 'string') {
+      return undefined;
     }
 
-    return simplified;
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return undefined;
+    }
+
+    const maxLength = 60;
+    return trimmed.length > maxLength ? `${trimmed.slice(0, maxLength)}...` : trimmed;
+  }
+
+  /**
+   * 判断布尔字段是否为真
+   */
+  private isTruthy(value: any): boolean {
+    if (typeof value === 'boolean') {
+      return value;
+    }
+
+    if (typeof value === 'string') {
+      return value.toLowerCase() === 'true';
+    }
+
+    return false;
   }
 
   /**
@@ -220,13 +390,10 @@ export class PromptBuilderService {
     const estimatedTokens = this.estimateTokens(prompt);
 
     if (estimatedTokens > maxTokens) {
-      this.logger.warn(
-        `Prompt too long: ${estimatedTokens} tokens (max: ${maxTokens})`,
-      );
+      this.logger.warn(`Prompt too long: ${estimatedTokens} tokens (max: ${maxTokens})`);
       return false;
     }
 
     return true;
   }
 }
-

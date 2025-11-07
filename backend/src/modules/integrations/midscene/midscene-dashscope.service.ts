@@ -3,7 +3,7 @@ import { VisionElement } from './midscene-real.service';
 
 /**
  * MidSceneJS - 阿里云 DashScope 视觉 API 适配器
- * 
+ *
  * 使用阿里云的 Qwen-VL-Max 模型进行视觉分析
  */
 @Injectable()
@@ -12,11 +12,21 @@ export class MidSceneDashScopeService {
   private readonly enabled: boolean;
   private readonly apiEndpoint: string;
   private readonly apiKey: string;
+  private readonly maxConcurrent: number;
+  private readonly timeoutMs: number;
+  private readonly warnLatencyMs: number;
+  private readonly latencySampleSize = 25;
+  private activeRequests = 0;
+  private waitQueue: Array<() => void> = [];
+  private latencySamples: number[] = [];
 
   constructor() {
     this.enabled = process.env.MIDSCENE_ENABLED === 'true';
-    this.apiEndpoint = process.env.LLM_API_ENDPOINT || '';
-    this.apiKey = process.env.LLM_API_KEY || '';
+    this.apiEndpoint = process.env.MIDSCENE_API_ENDPOINT || process.env.LLM_API_ENDPOINT || '';
+    this.apiKey = (process.env.MIDSCENE_API_KEY || process.env.LLM_API_KEY || '').trim();
+    this.maxConcurrent = Math.max(1, Number(process.env.MIDSCENE_MAX_CONCURRENCY || 3));
+    this.timeoutMs = Math.max(1000, Number(process.env.MIDSCENE_TIMEOUT_MS || 8000));
+    this.warnLatencyMs = Math.max(500, Number(process.env.MIDSCENE_WARN_LATENCY_MS || 2000));
   }
 
   /**
@@ -29,63 +39,13 @@ export class MidSceneDashScopeService {
     }
 
     try {
-      const base64Image = screenshotBuffer.toString('base64');
-
-      // 调用阿里云 Qwen-VL-Max API
-      const response = await fetch(this.apiEndpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.apiKey}`,
-        },
-        body: JSON.stringify({
-          model: 'qwen-vl-max',
-          messages: [
-            {
-              role: 'user',
-              content: [
-                {
-                  type: 'image_url',
-                  image_url: {
-                    url: `data:image/png;base64,${base64Image}`,
-                  },
-                },
-                {
-                  type: 'text',
-                  text: `请分析这个移动应用界面截图，识别所有可交互的 UI 元素。
-
-对每个元素，请提供：
-1. 元素类型（button/input/text/image/icon）
-2. 文本内容（如果有）
-3. 元素边界（x, y, width, height，相对于截图左上角的像素坐标）
-4. 置信度（0-1）
-
-请以 JSON 数组格式返回，格式如下：
-[
-  {
-    "type": "button",
-    "text": "提交",
-    "bbox": {"x": 100, "y": 200, "width": 300, "height": 60},
-    "confidence": 0.95
-  }
-]`,
-                },
-              ],
-            },
-          ],
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`DashScope API error: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      
-      // 解析 Qwen-VL-Max 的响应
+      const payload = this.buildVisionPayload(screenshotBuffer);
+      const data = await this.callDashScope(payload, 'vision-analyze');
       const elements = this.parseQwenVLResponse(data);
 
-      this.logger.log(`DashScope analyzed screen, found ${elements.length} elements`);
+      this.logger.log(
+        `DashScope analyzed screen, found ${elements.length} elements (active: ${this.activeRequests})`,
+      );
 
       return elements;
     } catch (error) {
@@ -104,44 +64,13 @@ export class MidSceneDashScopeService {
     }
 
     try {
-      const base64Image = screenshotBuffer.toString('base64');
-
-      const response = await fetch(this.apiEndpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.apiKey}`,
-        },
-        body: JSON.stringify({
-          model: 'qwen-vl-max',
-          messages: [
-            {
-              role: 'user',
-              content: [
-                {
-                  type: 'image_url',
-                  image_url: {
-                    url: `data:image/png;base64,${base64Image}`,
-                  },
-                },
-                {
-                  type: 'text',
-                  text: '请识别并提取这个移动应用界面中的所有可见文字。以 JSON 数组格式返回，每个元素是一个文本字符串。',
-                },
-              ],
-            },
-          ],
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`DashScope API error: ${response.statusText}`);
-      }
-
-      const data = await response.json();
+      const payload = this.buildOcrPayload(screenshotBuffer);
+      const data = await this.callDashScope(payload, 'vision-ocr');
       const texts = this.parseOCRResponse(data);
 
-      this.logger.log(`Extracted ${texts.length} text elements`);
+      this.logger.log(
+        `DashScope OCR extracted ${texts.length} entries (active: ${this.activeRequests})`,
+      );
 
       return texts;
     } catch (error) {
@@ -166,7 +95,7 @@ export class MidSceneDashScopeService {
     try {
       // Qwen-VL-Max 返回格式
       const content = data.choices?.[0]?.message?.content || '';
-      
+
       // 尝试从响应中提取 JSON
       const jsonMatch = content.match(/\[[\s\S]*\]/);
       if (!jsonMatch) {
@@ -201,7 +130,7 @@ export class MidSceneDashScopeService {
   private parseOCRResponse(data: any): string[] {
     try {
       const content = data.choices?.[0]?.message?.content || '';
-      
+
       const jsonMatch = content.match(/\[[\s\S]*\]/);
       if (!jsonMatch) {
         // 如果没有 JSON，尝试按行分割
@@ -218,7 +147,12 @@ export class MidSceneDashScopeService {
   /**
    * 健康检查
    */
-  async healthCheck(): Promise<{ status: string; enabled: boolean; endpoint: string }> {
+  async healthCheck(): Promise<{
+    status: string;
+    enabled: boolean;
+    endpoint: string;
+    metrics?: any;
+  }> {
     if (!this.enabled) {
       return {
         status: 'disabled',
@@ -233,6 +167,7 @@ export class MidSceneDashScopeService {
         status: 'not_configured',
         enabled: true,
         endpoint: this.apiEndpoint,
+        metrics: this.getMetricsSnapshot(),
       };
     }
 
@@ -240,7 +175,178 @@ export class MidSceneDashScopeService {
       status: 'available',
       enabled: true,
       endpoint: this.apiEndpoint,
+      metrics: this.getMetricsSnapshot(),
+    };
+  }
+
+  private buildVisionPayload(screenshotBuffer: Buffer): any {
+    const base64Image = screenshotBuffer.toString('base64');
+
+    return {
+      model: 'qwen-vl-max',
+      messages: [
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'image_url',
+              image_url: {
+                url: `data:image/png;base64,${base64Image}`,
+              },
+            },
+            {
+              type: 'text',
+              text: `请分析这个移动应用界面截图，识别所有可交互的 UI 元素。
+
+对每个元素，请提供：
+1. 元素类型（button/input/text/image/icon）
+2. 文本内容（如果有）
+3. 元素边界（x, y, width, height，相对于截图左上角的像素坐标）
+4. 置信度（0-1）
+
+请以 JSON 数组格式返回。`,
+            },
+          ],
+        },
+      ],
+    };
+  }
+
+  private buildOcrPayload(screenshotBuffer: Buffer): any {
+    const base64Image = screenshotBuffer.toString('base64');
+
+    return {
+      model: 'qwen-vl-max',
+      messages: [
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'image_url',
+              image_url: {
+                url: `data:image/png;base64,${base64Image}`,
+              },
+            },
+            {
+              type: 'text',
+              text: '请识别并提取这个移动应用界面中的所有可见文字。以 JSON 数组格式返回，每个元素是一个文本字符串。',
+            },
+          ],
+        },
+      ],
+    };
+  }
+
+  private async callDashScope(payload: any, operation: string): Promise<any> {
+    if (!this.enabled) {
+      throw new Error('DashScope integration is disabled');
+    }
+
+    if (!this.apiKey) {
+      throw new Error('DashScope API key not configured');
+    }
+
+    if (!this.apiEndpoint) {
+      throw new Error('DashScope API endpoint not configured');
+    }
+
+    await this.acquireSlot();
+
+    const controller = new AbortController();
+    const timeoutHandle = setTimeout(() => controller.abort(), this.timeoutMs);
+    const start = Date.now();
+
+    try {
+      const response = await fetch(this.apiEndpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${this.apiKey}`,
+          'X-DashScope-Token': this.apiKey,
+        },
+        body: JSON.stringify(payload),
+        signal: controller.signal,
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(
+          `DashScope API error (${operation}): ${response.status} ${response.statusText} - ${errorText}`,
+        );
+      }
+
+      return await response.json();
+    } catch (error) {
+      const err = error as any;
+      if (err?.name === 'AbortError') {
+        throw new Error(`DashScope request timed out after ${this.timeoutMs}ms (${operation})`);
+      }
+      throw err;
+    } finally {
+      clearTimeout(timeoutHandle);
+      const duration = Date.now() - start;
+      this.recordLatency(duration);
+
+      if (duration > this.warnLatencyMs) {
+        this.logger.warn(
+          `DashScope ${operation} latency ${duration}ms exceeded threshold ${this.warnLatencyMs}ms`,
+        );
+      }
+
+      this.releaseSlot();
+    }
+  }
+
+  private async acquireSlot(): Promise<void> {
+    if (this.activeRequests < this.maxConcurrent) {
+      this.activeRequests += 1;
+      return;
+    }
+
+    await new Promise<void>((resolve) => {
+      this.waitQueue.push(resolve);
+    });
+
+    this.activeRequests += 1;
+  }
+
+  private releaseSlot(): void {
+    this.activeRequests = Math.max(0, this.activeRequests - 1);
+    const next = this.waitQueue.shift();
+    if (next) {
+      next();
+    }
+  }
+
+  private recordLatency(duration: number): void {
+    if (!Number.isFinite(duration)) {
+      return;
+    }
+
+    this.latencySamples.push(duration);
+    if (this.latencySamples.length > this.latencySampleSize) {
+      this.latencySamples.shift();
+    }
+  }
+
+  private getMetricsSnapshot() {
+    const samples = [...this.latencySamples];
+    const avg = samples.length
+      ? samples.reduce((sum, value) => sum + value, 0) / samples.length
+      : 0;
+
+    const sorted = samples.slice().sort((a, b) => a - b);
+    const p95Index = sorted.length
+      ? Math.min(sorted.length - 1, Math.floor(sorted.length * 0.95))
+      : 0;
+    const p95 = sorted.length ? sorted[p95Index] : 0;
+
+    return {
+      activeRequests: this.activeRequests,
+      maxConcurrent: this.maxConcurrent,
+      averageLatencyMs: Number(avg.toFixed(2)),
+      p95LatencyMs: Math.round(p95),
+      sampleSize: samples.length,
     };
   }
 }
-

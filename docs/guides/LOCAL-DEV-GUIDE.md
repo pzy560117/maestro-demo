@@ -55,9 +55,9 @@ npm run start:dev
 看到以下输出表示成功：
 ```
 ✅ Maestro Backend Started Successfully!
-🚀 Server: http://localhost:3000
-📚 API Docs: http://localhost:3000/api/docs
-💚 Health Check: http://localhost:3000/api/v1/health
+🚀 Server: http://localhost:8360
+📚 API Docs: http://localhost:8360/api/docs
+💚 Health Check: http://localhost:8360/api/v1/health
 ```
 
 ## 🧪 测试API
@@ -73,7 +73,7 @@ cd D:\Project\maestro\backend
 
 ```powershell
 # 测试Health接口
-Invoke-RestMethod -Uri http://localhost:3000/api/v1/health
+Invoke-RestMethod -Uri http://localhost:8360/api/v1/health
 
 # 创建设备
 $device = @{
@@ -83,18 +83,18 @@ $device = @{
     deviceType = "EMULATOR"
 } | ConvertTo-Json
 
-Invoke-RestMethod -Uri http://localhost:3000/api/v1/devices `
+Invoke-RestMethod -Uri http://localhost:8360/api/v1/devices `
     -Method Post `
     -Body $device `
     -ContentType "application/json"
 
 # 获取设备列表
-Invoke-RestMethod -Uri "http://localhost:3000/api/v1/devices?page=1&pageSize=10"
+Invoke-RestMethod -Uri "http://localhost:8360/api/v1/devices?page=1&pageSize=10"
 ```
 
 ### 方法3：使用Swagger UI
 
-浏览器打开：http://localhost:3000/api/docs
+浏览器打开：http://localhost:8360/api/docs
 
 ## 📦 数据库管理
 
@@ -231,7 +231,7 @@ docker-compose up -d --build
    - 查看Terminal 2的编译输出
 
 3. **测试API**
-   - 使用Swagger UI：http://localhost:3000/api/docs
+   - 使用Swagger UI：http://localhost:8360/api/docs
    - 或运行测试脚本：`.\test-api.ps1`
 
 4. **提交代码**
@@ -277,9 +277,9 @@ npx nest generate service modules/my-feature
 
 | 服务 | 地址 | 说明 |
 |------|------|------|
-| 后端API | http://localhost:3000 | NestJS应用 |
-| Swagger文档 | http://localhost:3000/api/docs | API文档 |
-| Health检查 | http://localhost:3000/api/v1/health | 健康检查 |
+| 后端API | http://localhost:8360 | NestJS应用 |
+| Swagger文档 | http://localhost:8360/api/docs | API文档 |
+| Health检查 | http://localhost:8360/api/v1/health | 健康检查 |
 | PostgreSQL | localhost:5432 | 数据库 |
 | Redis | localhost:6379 | 缓存 |
 | MinIO API | http://localhost:9000 | 对象存储 |

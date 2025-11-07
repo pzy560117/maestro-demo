@@ -24,6 +24,13 @@ export class TaskResponseDto {
   })
   appVersionId: string;
 
+  @ApiProperty({
+    description: '设备ID列表',
+    type: [String],
+    example: ['d1234567-89ab-cdef-0123-456789abcdef'],
+  })
+  deviceIds: string[];
+
   @ApiPropertyOptional({
     description: '应用版本信息（关联查询时返回）',
   })
@@ -117,6 +124,10 @@ export class TaskResponseDto {
     this.createdAt = task.createdAt;
     this.updatedAt = task.updatedAt;
 
+    // 从 coverageConfig 提取 deviceIds
+    const config = task.coverageConfig as any;
+    this.deviceIds = Array.isArray(config?.deviceIds) ? config.deviceIds : [];
+
     // 关联数据
     if (task.appVersion) {
       this.appVersion = {
@@ -132,4 +143,3 @@ export class TaskResponseDto {
     }
   }
 }
-

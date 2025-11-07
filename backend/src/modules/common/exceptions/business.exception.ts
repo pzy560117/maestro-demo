@@ -79,4 +79,3 @@ export class BusinessException extends HttpException {
     return new BusinessException(400002, message, details, HttpStatus.BAD_REQUEST);
   }
 }
-

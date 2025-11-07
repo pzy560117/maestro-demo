@@ -11,7 +11,7 @@ import { PrismaModule } from '../common/prisma/prisma.module';
  * LLM 模块
  * 实现功能 D：LLM 指令生成与安全控制（FR-03/04）
  * 实现功能 J：LLM 审计日志（FR-13, Iteration 3）
- * 
+ *
  * 提供：
  * - LLM 指令生成
  * - Prompt 构建
@@ -21,13 +21,7 @@ import { PrismaModule } from '../common/prisma/prisma.module';
 @Module({
   imports: [ConfigModule, PrismaModule],
   controllers: [LlmController],
-  providers: [
-    LlmService,
-    PromptBuilderService,
-    SafetyCheckService,
-    LlmAuditService,
-  ],
+  providers: [LlmService, PromptBuilderService, SafetyCheckService, LlmAuditService],
   exports: [LlmService, LlmAuditService], // 导出供 Orchestrator 使用
 })
 export class LlmModule {}
-

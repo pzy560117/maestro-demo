@@ -79,13 +79,15 @@ export class DevicesController {
   async findAll(
     @Query('page') page?: number,
     @Query('limit') limit?: number,
-  ): Promise<BaseResponseDto<{
-    items: DeviceResponseDto[];
-    total: number;
-    page: number;
-    limit: number;
-    totalPages: number;
-  }>> {
+  ): Promise<
+    BaseResponseDto<{
+      items: DeviceResponseDto[];
+      total: number;
+      page: number;
+      limit: number;
+      totalPages: number;
+    }>
+  > {
     const result = await this.devicesService.findAll({ page, limit });
     return BaseResponseDto.success(result);
   }
@@ -123,21 +125,27 @@ export class DevicesController {
       },
     },
   })
-  async scanDevices(): Promise<BaseResponseDto<{
-    devices: any[];
-    total: number;
-    scannedAt: string;
-  }>> {
+  async scanDevices(): Promise<
+    BaseResponseDto<{
+      devices: any[];
+      total: number;
+      scannedAt: string;
+    }>
+  > {
     const devices = await this.devicesService.scanDevices();
-    const message = devices.length > 0 
-      ? `扫描成功，检测到 ${devices.length} 台设备`
-      : '扫描完成，未检测到连接的设备';
-    
-    return BaseResponseDto.success({
-      devices,
-      total: devices.length,
-      scannedAt: new Date().toISOString(),
-    }, message);
+    const message =
+      devices.length > 0
+        ? `扫描成功，检测到 ${devices.length} 台设备`
+        : '扫描完成，未检测到连接的设备';
+
+    return BaseResponseDto.success(
+      {
+        devices,
+        total: devices.length,
+        scannedAt: new Date().toISOString(),
+      },
+      message,
+    );
   }
 
   /**
@@ -180,9 +188,7 @@ export class DevicesController {
       },
     },
   })
-  async batchCreate(
-    @Body() body: { devices: CreateDeviceDto[] },
-  ): Promise<BaseResponseDto<any>> {
+  async batchCreate(@Body() body: { devices: CreateDeviceDto[] }): Promise<BaseResponseDto<any>> {
     const result = await this.devicesService.batchCreate(body.devices);
     return BaseResponseDto.success(result, '批量添加完成');
   }
@@ -271,6 +277,4 @@ export class DevicesController {
     await this.devicesService.updateHeartbeat(id);
     return BaseResponseDto.success(undefined, '心跳更新成功');
   }
-
 }
-

@@ -272,6 +272,7 @@ model Screen {
   domHash            String            @map("dom_hash") @db.Text
   primaryText        String?           @map("primary_text") @db.Text
   screenshotPath     String            @map("screenshot_path") @db.Text
+  screenshotPublicUrl String?          @map("screenshot_public_url") @db.Text
   screenshotThumbPath String?          @map("screenshot_thumb_path") @db.Text
   domPath            String            @map("dom_path") @db.Text
   orientation        ScreenOrientation

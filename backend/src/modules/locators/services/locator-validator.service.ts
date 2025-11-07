@@ -15,13 +15,13 @@ export interface ValidationResult {
 /**
  * 定位验证服务
  * 功能 F：自动验证与截图回放（FR-08）
- * 
+ *
  * 职责：
  * 1. 验证定位候选是否可点击/高亮
  * 2. 记录验证结果与截图
  * 3. 更新成功率
  * 4. 触发验证失败告警
- * 
+ *
  * 验收标准：
  * 1. 验证通过的候选 status=PASSED，记录 last_verified_at
  * 2. 失败超限时产生告警，记录失败截图
@@ -36,7 +36,7 @@ export class LocatorValidatorService {
 
   /**
    * 验证定位候选
-   * 
+   *
    * @param locatorCandidateId - 定位候选 ID
    * @param taskRunId - 任务运行 ID
    * @param validationType - 验证类型
@@ -57,12 +57,7 @@ export class LocatorValidatorService {
       result = await executor();
 
       // 记录验证结果
-      await this.recordValidation(
-        locatorCandidateId,
-        taskRunId,
-        validationType,
-        result,
-      );
+      await this.recordValidation(locatorCandidateId, taskRunId, validationType, result);
 
       // 更新成功率
       if (result.status === ValidationStatus.PASSED) {
@@ -83,12 +78,7 @@ export class LocatorValidatorService {
         notes: err.message,
       };
 
-      await this.recordValidation(
-        locatorCandidateId,
-        taskRunId,
-        validationType,
-        result,
-      );
+      await this.recordValidation(locatorCandidateId, taskRunId, validationType, result);
 
       await this.updateSuccessRate(locatorCandidateId, false);
 
@@ -98,7 +88,7 @@ export class LocatorValidatorService {
 
   /**
    * 批量验证定位候选（按置信度顺序）
-   * 
+   *
    * @param elementId - 元素 ID
    * @param taskRunId - 任务运行 ID
    * @param validationType - 验证类型
@@ -114,10 +104,7 @@ export class LocatorValidatorService {
     // 获取所有定位候选，按置信度排序
     const candidates = await this.prisma.locatorCandidate.findMany({
       where: { elementId },
-      orderBy: [
-        { isPrimary: 'desc' },
-        { score: 'desc' },
-      ],
+      orderBy: [{ isPrimary: 'desc' }, { score: 'desc' }],
       take: 5,
     });
 
@@ -128,13 +115,12 @@ export class LocatorValidatorService {
 
     // 按顺序尝试每个候选
     for (const candidate of candidates) {
-      this.logger.debug(`Validating candidate ${candidate.id} (${candidate.strategy}: ${candidate.locatorValue})`);
+      this.logger.debug(
+        `Validating candidate ${candidate.id} (${candidate.strategy}: ${candidate.locatorValue})`,
+      );
 
-      const result = await this.validateCandidate(
-        candidate.id,
-        taskRunId,
-        validationType,
-        () => executorFactory(candidate.locatorValue, candidate.strategy),
+      const result = await this.validateCandidate(candidate.id, taskRunId, validationType, () =>
+        executorFactory(candidate.locatorValue, candidate.strategy),
       );
 
       if (result.status === ValidationStatus.PASSED) {
@@ -275,4 +261,3 @@ export class LocatorValidatorService {
     return validations;
   }
 }
-

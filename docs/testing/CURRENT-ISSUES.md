@@ -83,19 +83,19 @@ MINIO_PORT=9000
 
 2. 重试任务：
 ```bash
-curl -X POST http://localhost:3000/api/v1/tasks/{taskId}/retry
+curl -X POST http://localhost:8360/api/v1/tasks/{taskId}/retry
 ```
 
 3. 检查任务运行：
 ```bash
-curl http://localhost:3000/api/v1/orchestrator/running
+curl http://localhost:8360/api/v1/orchestrator/running
 ```
 
 4. 等待任务执行完成（30-60秒）
 
 5. 查看运行记录：
 ```bash
-curl http://localhost:3000/api/v1/tasks/{taskId}/runs
+curl http://localhost:8360/api/v1/tasks/{taskId}/runs
 ```
 
 ## 预期结果

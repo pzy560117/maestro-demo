@@ -10,20 +10,9 @@ import {
   HttpStatus,
   ParseUUIDPipe,
 } from '@nestjs/common';
-import {
-  ApiTags,
-  ApiOperation,
-  ApiResponse,
-  ApiParam,
-  ApiQuery,
-} from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiQuery } from '@nestjs/swagger';
 import { AlertsService } from './alerts.service';
-import {
-  CreateAlertDto,
-  AcknowledgeAlertDto,
-  QueryAlertDto,
-  SendNotificationDto,
-} from './dto';
+import { CreateAlertDto, AcknowledgeAlertDto, QueryAlertDto, SendNotificationDto } from './dto';
 
 /**
  * 告警管理控制器
@@ -106,12 +95,8 @@ export class AlertsController {
     status: 200,
     description: '统计成功',
   })
-  async getStatistics(
-    @Query('startTime') startTime?: string,
-    @Query('endTime') endTime?: string,
-  ) {
-    const timeRange =
-      startTime && endTime ? { startTime, endTime } : undefined;
+  async getStatistics(@Query('startTime') startTime?: string, @Query('endTime') endTime?: string) {
+    const timeRange = startTime && endTime ? { startTime, endTime } : undefined;
     const stats = await this.alertsService.getStatistics(timeRange);
     return {
       code: 0,
@@ -170,10 +155,7 @@ export class AlertsController {
     status: 200,
     description: '确认成功',
   })
-  async acknowledge(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body() ackDto: AcknowledgeAlertDto,
-  ) {
+  async acknowledge(@Param('id', ParseUUIDPipe) id: string, @Body() ackDto: AcknowledgeAlertDto) {
     const alert = await this.alertsService.acknowledge(id, ackDto);
     return {
       code: 0,
@@ -235,4 +217,3 @@ export class AlertsController {
     };
   }
 }
-

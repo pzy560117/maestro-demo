@@ -1,0 +1,1 @@
+{"name":"自动遍历回归","appVersionId":"75735797-6e35-49e4-a13b-a85979916892","deviceIds":["c0589250-4dbf-44e5-b63c-53b2e3f57ad6"],"coverageProfile":"SMOKE","priority":2,"coverageConfig":{"blacklistPaths":["/settings"],"maxDepth":3}}

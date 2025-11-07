@@ -10,13 +10,13 @@ import { ElementVisibility, Screen, Element } from '@prisma/client';
 /**
  * 界面管理服务
  * 功能 G：界面签名与存档（FR-09）
- * 
+ *
  * 职责：
  * 1. 创建界面记录并生成签名
  * 2. 存储截图、DOM 和元素
  * 3. 查询界面库
  * 4. 管理元素版本
- * 
+ *
  * 验收标准：
  * 1. 同一界面多次访问生成相同签名
  * 2. 新界面存档后，可在界面库查看缩略图
@@ -41,7 +41,7 @@ export class ScreensService {
 
   /**
    * 创建界面记录
-   * 
+   *
    * 流程：
    * 1. 保存截图、DOM 文件
    * 2. 计算哈希和签名
@@ -57,18 +57,26 @@ export class ScreensService {
     const { appVersionId, elements: elementInfos } = createScreenDto;
 
     // 1. 保存文件到存储
-    const screenshotPath = await this.storageService.saveScreenshot(screenshotBuffer, appVersionId);
-    const domPath = await this.storageService.saveDom(domData, appVersionId);
+    const screenshotAsset = await this.storageService.saveScreenshot(
+      screenshotBuffer,
+      appVersionId,
+    );
+    const domAsset = await this.storageService.saveDom(domData, appVersionId);
 
     // 2. 计算哈希
     const screenshotHash = this.signatureService.computeFileHash(screenshotBuffer);
     const domHash = this.signatureService.computeDomHash(domData);
 
     // 3. 提取主要文案（如果未提供）
-    const primaryText = createScreenDto.primaryText || this.signatureService.extractPrimaryText(domData);
+    const primaryText =
+      createScreenDto.primaryText || this.signatureService.extractPrimaryText(domData);
 
     // 4. 生成签名
-    const signature = this.signatureService.generateSignature(screenshotHash, domHash, primaryText || undefined);
+    const signature = this.signatureService.generateSignature(
+      screenshotHash,
+      domHash,
+      primaryText || undefined,
+    );
 
     this.logger.log(`Generated screen signature: ${signature}`);
 
@@ -97,9 +105,10 @@ export class ScreensService {
         signature,
         domHash,
         primaryText,
-        screenshotPath,
+        screenshotPath: screenshotAsset.relativePath,
+        screenshotPublicUrl: screenshotAsset.publicUrl ?? null,
         screenshotThumbPath: createScreenDto.screenshotThumbPath || null,
-        domPath,
+        domPath: domAsset.relativePath,
         orientation: createScreenDto.orientation,
         width: createScreenDto.width,
         height: createScreenDto.height,
@@ -119,7 +128,7 @@ export class ScreensService {
     // 7. 创建元素记录
     if (elementInfos && elementInfos.length > 0) {
       await this.createElements(screen.id, elementInfos);
-      
+
       // 重新查询以包含元素
       const screenWithElements = await this.prisma.screen.findUnique({
         where: { id: screen.id },
@@ -135,7 +144,10 @@ export class ScreensService {
   /**
    * 批量创建元素
    */
-  private async createElements(screenId: string, elementInfos: ElementInfoDto[]): Promise<Element[]> {
+  private async createElements(
+    screenId: string,
+    elementInfos: ElementInfoDto[],
+  ): Promise<Element[]> {
     const elements: Element[] = [];
 
     for (const info of elementInfos) {
@@ -189,7 +201,10 @@ export class ScreensService {
   /**
    * 根据签名查询界面
    */
-  async findBySignature(appVersionId: string, signature: string): Promise<ScreenResponseDto | null> {
+  async findBySignature(
+    appVersionId: string,
+    signature: string,
+  ): Promise<ScreenResponseDto | null> {
     const screen = await this.prisma.screen.findUnique({
       where: {
         appVersionId_signature: {
@@ -329,4 +344,3 @@ export class ScreensService {
     return await this.storageService.readScreenshot(screen.screenshotPath);
   }
 }
-

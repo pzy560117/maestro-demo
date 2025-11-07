@@ -19,7 +19,7 @@ import { CoverageProfile } from '@prisma/client';
 /**
  * 创建遍历任务 DTO
  * 实现功能 B：遍历任务创建（FR-01）
- * 
+ *
  * 验收标准：
  * 1. 未选择设备提交时，提示"请选择至少一台设备"
  * 2. 任务名称长度 ≤50 字符
@@ -111,4 +111,3 @@ export class CreateTaskDto {
   @IsOptional()
   scheduleAt?: Date;
 }
-

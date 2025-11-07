@@ -15,6 +15,8 @@ export enum AllowedActionType {
   LONG_PRESS = 'LONG_PRESS',
 }
 
+import { VisionSnapshot } from '../../common/types/vision.types';
+
 /**
  * LLM 请求参数
  */
@@ -25,8 +27,12 @@ export interface LlmRequest {
   screenId?: string;
   /** 截图路径 */
   screenshotPath: string;
+  /** 截图公共访问 URL */
+  screenshotPublicUrl?: string;
   /** DOM 结构（可选） */
   domJson?: any;
+  /** 视觉摘要（可选） */
+  visionSummary?: VisionSnapshot;
   /** 历史操作记录 */
   historyActions?: Array<{
     action: string;
@@ -165,4 +171,3 @@ export interface LlmConfig {
   /** 是否启用多模态 */
   multimodal: boolean;
 }
-

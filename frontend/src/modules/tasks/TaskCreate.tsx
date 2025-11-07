@@ -83,7 +83,7 @@ export function TaskCreate() {
       appId: '',
       appVersionId: '',
       deviceIds: [],
-      coverageStrategy: CoverageStrategy.CORE,
+      coverageStrategy: CoverageStrategy.SMOKE, // 后端枚举是 SMOKE
       priority: 5,
       blacklistPaths: [],
     },
@@ -96,9 +96,11 @@ export function TaskCreate() {
         name: data.name,
         appVersionId: data.appVersionId,
         deviceIds: data.deviceIds,
-        coverageStrategy: data.coverageStrategy,
-        priority: data.priority,
-        blacklistPaths: data.blacklistPaths,
+        coverageProfile: data.coverageStrategy, // 后端字段名是 coverageProfile
+        priority: Math.min(Math.max(data.priority || 3, 1), 5), // 后端优先级范围是 1-5
+        coverageConfig: {
+          blacklistPaths: data.blacklistPaths || [],
+        },
       }),
     onSuccess: (task) => {
       navigate(`/tasks/${task.id}`);
@@ -249,7 +251,7 @@ export function TaskCreate() {
                         </FormControl>
                         <SelectContent>
                           <SelectItem value={CoverageStrategy.FULL}>全量遍历</SelectItem>
-                          <SelectItem value={CoverageStrategy.CORE}>核心路径</SelectItem>
+                          <SelectItem value={CoverageStrategy.SMOKE}>核心路径</SelectItem>
                           <SelectItem value={CoverageStrategy.CUSTOM}>自定义</SelectItem>
                         </SelectContent>
                       </Select>

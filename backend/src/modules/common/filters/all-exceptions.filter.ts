@@ -24,9 +24,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
     // 判断是否为HTTP异常
     const isHttpException = exception instanceof HttpException;
-    const status = isHttpException
-      ? exception.getStatus()
-      : HttpStatus.INTERNAL_SERVER_ERROR;
+    const status = isHttpException ? exception.getStatus() : HttpStatus.INTERNAL_SERVER_ERROR;
 
     // 生成traceId
     const traceId = (request.headers['x-trace-id'] as string) || crypto.randomUUID();
@@ -66,4 +64,3 @@ export class AllExceptionsFilter implements ExceptionFilter {
     response.status(status).json(errorResponse);
   }
 }
-

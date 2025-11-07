@@ -1,10 +1,4 @@
-import {
-  Injectable,
-  NestInterceptor,
-  ExecutionContext,
-  CallHandler,
-  Logger,
-} from '@nestjs/common';
+import { Injectable, NestInterceptor, ExecutionContext, CallHandler, Logger } from '@nestjs/common';
 import { Observable } from 'rxjs';
 import { tap } from 'rxjs/operators';
 
@@ -20,14 +14,14 @@ export class LoggingInterceptor implements NestInterceptor {
   intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
     const request = context.switchToHttp().getRequest();
     const response = context.switchToHttp().getResponse();
-    
+
     const { method, url, body, query, params, ip, headers } = request;
     const userAgent = headers['user-agent'] || '';
     const traceId = headers['x-trace-id'] || this.generateTraceId();
-    
+
     // 请求开始时间
     const startTime = Date.now();
-    
+
     // 记录请求日志
     this.logger.log({
       type: 'REQUEST',
@@ -113,4 +107,3 @@ export class LoggingInterceptor implements NestInterceptor {
     return sanitized;
   }
 }
-

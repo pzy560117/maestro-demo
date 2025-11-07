@@ -46,7 +46,11 @@ export class CreateLocatorCandidateDto {
   @IsBoolean()
   isPrimary?: boolean;
 
-  @ApiProperty({ description: '动态标记', required: false, example: { hasTimestamp: false, hasUUID: false } })
+  @ApiProperty({
+    description: '动态标记',
+    required: false,
+    example: { hasTimestamp: false, hasUUID: false },
+  })
   @IsOptional()
   @IsObject()
   dynamicFlags?: Record<string, any>;
@@ -76,4 +80,3 @@ export class GenerateLocatorsDto {
   @IsBoolean()
   useHistorical?: boolean;
 }
-

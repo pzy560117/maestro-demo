@@ -21,15 +21,15 @@ export class AdbService {
     try {
       const { stdout } = await execAsync('adb devices');
       const lines = stdout.split('\n');
-      
+
       // 查找包含序列号且状态为device的行
       const deviceLine = lines.find(
         (line) => line.trim().startsWith(serial) && line.includes('device'),
       );
-      
+
       const isOnline = !!deviceLine;
       this.logger.debug(`Device ${serial} online status: ${isOnline}`);
-      
+
       return isOnline;
     } catch (error) {
       this.logger.error(`Failed to check device ${serial}`, error);
@@ -60,10 +60,8 @@ export class AdbService {
    */
   async getDeviceResolution(serial: string): Promise<string | null> {
     try {
-      const { stdout } = await execAsync(
-        `adb -s ${serial} shell wm size`,
-      );
-      
+      const { stdout } = await execAsync(`adb -s ${serial} shell wm size`);
+
       // 解析输出: "Physical size: 1080x1920"
       const match = stdout.match(/(\d+)x(\d+)/);
       return match ? match[0] : null;
@@ -81,7 +79,7 @@ export class AdbService {
     try {
       const { stdout } = await execAsync('adb devices');
       const lines = stdout.split('\n').slice(1); // 跳过标题行
-      
+
       return lines
         .filter((line) => line.trim() && line.includes('device'))
         .map((line) => line.split('\t')[0].trim());
@@ -106,34 +104,40 @@ export class AdbService {
    * @param includeSystem 是否包含系统应用，默认false
    * @returns 应用包名列表
    */
-  async getInstalledPackages(serial: string, includeSystem = false): Promise<Array<{
-    packageName: string;
-    appName: string;
-    versionName: string;
-    versionCode: number;
-    isSystemApp: boolean;
-  }>> {
+  async getInstalledPackages(
+    serial: string,
+    includeSystem = false,
+  ): Promise<
+    Array<{
+      packageName: string;
+      appName: string;
+      versionName: string;
+      versionCode: number;
+      isSystemApp: boolean;
+    }>
+  > {
     try {
       // 获取所有包名
-      const packagesCmd = includeSystem 
+      const packagesCmd = includeSystem
         ? `adb -s ${serial} shell pm list packages`
         : `adb -s ${serial} shell pm list packages -3`; // -3 只列出第三方应用
-      
+
       const { stdout } = await execAsync(packagesCmd);
       const packageNames = stdout
         .split('\n')
-        .filter(line => line.trim().startsWith('package:'))
-        .map(line => line.replace('package:', '').trim())
-        .filter(pkg => pkg.length > 0);
+        .filter((line) => line.trim().startsWith('package:'))
+        .map((line) => line.replace('package:', '').trim())
+        .filter((pkg) => pkg.length > 0);
 
       this.logger.log(`Found ${packageNames.length} packages on device ${serial}`);
 
       // 并发获取每个包的详细信息
-      const appInfoPromises = packageNames.slice(0, 50).map(async (packageName) => { // 限制50个应用，避免太慢
+      const appInfoPromises = packageNames.slice(0, 50).map(async (packageName) => {
+        // 限制50个应用，避免太慢
         try {
           // 获取应用信息
           const { stdout: dumpInfo } = await execAsync(
-            `adb -s ${serial} shell dumpsys package ${packageName} | grep -E "versionName|versionCode"`
+            `adb -s ${serial} shell dumpsys package ${packageName} | grep -E "versionName|versionCode"`,
           );
 
           // 解析版本信息
@@ -144,12 +148,12 @@ export class AdbService {
           let appName = packageName.split('.').pop() || packageName;
           try {
             const { stdout: labelInfo } = await execAsync(
-              `adb -s ${serial} shell pm list packages -f ${packageName}`
+              `adb -s ${serial} shell pm list packages -f ${packageName}`,
             );
             const apkPathMatch = labelInfo.match(/package:(.+\.apk)=/);
             if (apkPathMatch) {
               const { stdout: aaptInfo } = await execAsync(
-                `adb -s ${serial} shell aapt dump badging ${apkPathMatch[1]} | grep "application-label:"`
+                `adb -s ${serial} shell aapt dump badging ${apkPathMatch[1]} | grep "application-label:"`,
               );
               const appLabelMatch = aaptInfo.match(/application-label:'([^']+)'/);
               if (appLabelMatch) {
@@ -182,7 +186,7 @@ export class AdbService {
 
       const apps = await Promise.all(appInfoPromises);
       this.logger.log(`Retrieved info for ${apps.length} apps from device ${serial}`);
-      
+
       return apps;
     } catch (error) {
       this.logger.error(`Failed to get installed packages from device ${serial}`, error);
@@ -194,19 +198,21 @@ export class AdbService {
    * 获取连接的设备详细信息
    * @returns 设备信息列表
    */
-  async getConnectedDevicesInfo(): Promise<Array<{
-    serial: string;
-    model: string;
-    androidVersion: string;
-    resolution: string | null;
-    deviceType: 'REAL' | 'EMULATOR';
-    status: string;
-    manufacturer: string | null;
-  }>> {
+  async getConnectedDevicesInfo(): Promise<
+    Array<{
+      serial: string;
+      model: string;
+      androidVersion: string;
+      resolution: string | null;
+      deviceType: 'REAL' | 'EMULATOR';
+      status: string;
+      manufacturer: string | null;
+    }>
+  > {
     try {
       // 1. 获取所有在线设备
       const serials = await this.getOnlineDevices();
-      
+
       if (serials.length === 0) {
         this.logger.warn('No devices connected');
         return [];
@@ -228,7 +234,7 @@ export class AdbService {
             model: model || 'Unknown',
             androidVersion: androidVersion || 'Unknown',
             resolution,
-            deviceType: this.isEmulator(serial) ? 'EMULATOR' as const : 'REAL' as const,
+            deviceType: this.isEmulator(serial) ? ('EMULATOR' as const) : ('REAL' as const),
             status: 'ONLINE',
             manufacturer,
           };
@@ -239,7 +245,7 @@ export class AdbService {
             model: 'Unknown',
             androidVersion: 'Unknown',
             resolution: null,
-            deviceType: this.isEmulator(serial) ? 'EMULATOR' as const : 'REAL' as const,
+            deviceType: this.isEmulator(serial) ? ('EMULATOR' as const) : ('REAL' as const),
             status: 'ERROR',
             manufacturer: null,
           };
@@ -248,7 +254,7 @@ export class AdbService {
 
       const devices = await Promise.all(deviceInfoPromises);
       this.logger.log(`Scanned ${devices.length} devices`);
-      
+
       return devices;
     } catch (error) {
       // ADB 不可用或命令执行失败时，返回空数组而不是抛出异常
@@ -257,4 +263,3 @@ export class AdbService {
     }
   }
 }
-

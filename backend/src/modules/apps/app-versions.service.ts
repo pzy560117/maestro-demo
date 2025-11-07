@@ -51,9 +51,7 @@ export class AppVersionsService {
         versionCode: createVersionDto.versionCode,
         changelog: releaseNotes,
         apkHash: createVersionDto.apkHash,
-        releasedAt: createVersionDto.releasedAt
-          ? new Date(createVersionDto.releasedAt)
-          : null,
+        releasedAt: createVersionDto.releasedAt ? new Date(createVersionDto.releasedAt) : null,
       },
       include: {
         app: true,
@@ -68,7 +66,10 @@ export class AppVersionsService {
   /**
    * 查询指定应用的所有版本（支持分页）
    */
-  async findByAppId(appId: string, params?: { page?: number; limit?: number }): Promise<{
+  async findByAppId(
+    appId: string,
+    params?: { page?: number; limit?: number },
+  ): Promise<{
     items: AppVersionResponseDto[];
     total: number;
     page: number;
@@ -231,4 +232,3 @@ export class AppVersionsService {
     this.logger.log(`App version deleted: ${version.versionName}`);
   }
 }
-

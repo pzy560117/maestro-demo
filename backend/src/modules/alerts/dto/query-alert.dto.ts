@@ -76,4 +76,3 @@ export class QueryAlertDto {
   @Min(1)
   limit?: number = 20;
 }
-

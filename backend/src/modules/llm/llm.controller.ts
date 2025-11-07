@@ -9,14 +9,7 @@ import {
   ParseIntPipe,
   HttpStatus,
 } from '@nestjs/common';
-import {
-  ApiTags,
-  ApiOperation,
-  ApiResponse,
-  ApiParam,
-  ApiQuery,
-  ApiBody,
-} from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiQuery, ApiBody } from '@nestjs/swagger';
 import { LlmService } from './llm.service';
 import { LlmAuditService } from './services/llm-audit.service';
 import { LlmRequest, AllowedActionType } from './types/llm.types';
@@ -202,12 +195,8 @@ export class LlmController {
     status: HttpStatus.OK,
     description: '统计数据',
   })
-  async getStatistics(
-    @Query('startTime') startTime?: string,
-    @Query('endTime') endTime?: string,
-  ) {
-    const timeRange =
-      startTime && endTime ? { startTime, endTime } : undefined;
+  async getStatistics(@Query('startTime') startTime?: string, @Query('endTime') endTime?: string) {
+    const timeRange = startTime && endTime ? { startTime, endTime } : undefined;
     const stats = await this.llmAuditService.getStatistics(timeRange);
     return {
       code: 0,
@@ -278,4 +267,3 @@ export class LlmController {
     };
   }
 }
-

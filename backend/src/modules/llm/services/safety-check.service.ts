@@ -1,14 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
-import {
-  LlmResponse,
-  SafetyCheckResult,
-  AllowedActionType,
-} from '../types/llm.types';
+import { LlmResponse, SafetyCheckResult, AllowedActionType } from '../types/llm.types';
 
 /**
  * 安全校验服务
  * 实现功能 D：LLM 安全控制（FR-04）
- * 
+ *
  * 验收标准：
  * 1. Qwen3 返回非 JSON 格式时，系统记录错误并触发 fallback
  * 2. 非白名单动作被拦截，任务继续执行默认策略
@@ -103,10 +99,7 @@ export class SafetyCheckService {
    * 校验动作是否在白名单中
    * 验收标准2：非白名单动作被拦截
    */
-  checkActionWhitelist(
-    actionType: string,
-    allowedActions: AllowedActionType[],
-  ): SafetyCheckResult {
+  checkActionWhitelist(actionType: string, allowedActions: AllowedActionType[]): SafetyCheckResult {
     if (!allowedActions.includes(actionType as AllowedActionType)) {
       return {
         passed: false,
@@ -126,10 +119,7 @@ export class SafetyCheckService {
   /**
    * 校验动作参数合法性
    */
-  checkActionParams(
-    actionType: AllowedActionType,
-    params: any,
-  ): SafetyCheckResult {
+  checkActionParams(actionType: AllowedActionType, params: any): SafetyCheckResult {
     switch (actionType) {
       case AllowedActionType.CLICK:
         return this.checkClickParams(params);
@@ -169,10 +159,7 @@ export class SafetyCheckService {
     }
 
     // 检查坐标合法性（如果是坐标）
-    if (
-      typeof params.target === 'object' &&
-      ('x' in params.target || 'y' in params.target)
-    ) {
+    if (typeof params.target === 'object' && ('x' in params.target || 'y' in params.target)) {
       const { x, y } = params.target;
       if (
         typeof x !== 'number' ||
@@ -263,7 +250,7 @@ export class SafetyCheckService {
   /**
    * 综合安全校验
    * 组合所有校验规则
-   * 
+   *
    * 验收标准3：触发策略拒绝时记录
    */
   performComprehensiveCheck(
@@ -280,10 +267,7 @@ export class SafetyCheckService {
     const { actionPlan } = response;
 
     // 2. 白名单校验
-    const whitelistCheck = this.checkActionWhitelist(
-      actionPlan.actionType,
-      allowedActions,
-    );
+    const whitelistCheck = this.checkActionWhitelist(actionPlan.actionType, allowedActions);
     if (!whitelistCheck.passed) {
       this.logger.warn(`Whitelist check failed: ${whitelistCheck.reason}`);
       return whitelistCheck;
@@ -301,9 +285,7 @@ export class SafetyCheckService {
 
     // 4. 置信度校验
     if (actionPlan.confidence < 0.3) {
-      this.logger.warn(
-        `Low confidence action: ${actionPlan.confidence}, rejecting`,
-      );
+      this.logger.warn(`Low confidence action: ${actionPlan.confidence}, rejecting`);
       return {
         passed: false,
         reason: `置信度过低：${actionPlan.confidence}`,
@@ -337,4 +319,3 @@ export class SafetyCheckService {
     };
   }
 }
-

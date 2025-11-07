@@ -13,4 +13,3 @@ import { AdbService } from './services/adb.service';
   exports: [DevicesService, AdbService],
 })
 export class DevicesModule {}
-

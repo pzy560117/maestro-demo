@@ -32,4 +32,3 @@ export class CreateAppDto {
   @Length(0, 500, { message: '应用说明长度不能超过500字符' })
   description?: string;
 }
-

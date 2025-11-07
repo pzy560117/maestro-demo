@@ -183,13 +183,15 @@ export class AppsService {
    * @param deviceId 设备ID（可选，如果不提供则使用第一个在线设备）
    * @returns 扫描到的应用列表，标记是否已存在于数据库中
    */
-  async scanApps(deviceId?: string): Promise<Array<{
-    packageName: string;
-    appName: string;
-    versionName: string;
-    versionCode: number;
-    isExisting: boolean;
-  }>> {
+  async scanApps(deviceId?: string): Promise<
+    Array<{
+      packageName: string;
+      appName: string;
+      versionName: string;
+      versionCode: number;
+      isExisting: boolean;
+    }>
+  > {
     // 1. 获取设备序列号
     let serial: string;
 
@@ -219,7 +221,7 @@ export class AppsService {
     const existingApps = await this.prisma.app.findMany({
       where: {
         packageName: {
-          in: installedApps.map(app => app.packageName),
+          in: installedApps.map((app) => app.packageName),
         },
       },
       select: {
@@ -227,10 +229,10 @@ export class AppsService {
       },
     });
 
-    const existingPackageNames = new Set(existingApps.map(app => app.packageName));
+    const existingPackageNames = new Set(existingApps.map((app) => app.packageName));
 
     // 4. 返回扫描结果，标记是否已存在
-    const scanResults = installedApps.map(app => ({
+    const scanResults = installedApps.map((app) => ({
       packageName: app.packageName,
       appName: app.appName,
       versionName: app.versionName,
@@ -238,7 +240,9 @@ export class AppsService {
       isExisting: existingPackageNames.has(app.packageName),
     }));
 
-    this.logger.log(`Found ${scanResults.length} apps, ${existingPackageNames.size} already in database`);
+    this.logger.log(
+      `Found ${scanResults.length} apps, ${existingPackageNames.size} already in database`,
+    );
 
     return scanResults;
   }
@@ -303,4 +307,3 @@ export class AppsService {
     };
   }
 }
-

@@ -19,10 +19,7 @@ async function bootstrap() {
   app.useGlobalInterceptors(new LoggingInterceptor());
 
   // 全局异常过滤器
-  app.useGlobalFilters(
-    new AllExceptionsFilter(),
-    new HttpExceptionFilter(),
-  );
+  app.useGlobalFilters(new AllExceptionsFilter(), new HttpExceptionFilter());
 
   // 全局验证管道 - 遵循参数校验规范
   app.useGlobalPipes(
@@ -49,7 +46,8 @@ async function bootstrap() {
   // Swagger文档配置 - 遵循API文档规范
   const config = new DocumentBuilder()
     .setTitle('Maestro API')
-    .setDescription(`LLM驱动的手机端UI自动化定位系统 - API文档
+    .setDescription(
+      `LLM驱动的手机端UI自动化定位系统 - API文档
     
     ## Iteration 1 - 遍历指挥调度核心
     本迭代实现了核心的任务调度和LLM指令生成功能：
@@ -62,7 +60,8 @@ async function bootstrap() {
     - PostgreSQL 数据库
     - Qwen3-VL 多模态大模型（Mock）
     - Appium + MidSceneJS（集成中）
-    `)
+    `,
+    )
     .setVersion('1.0.0-iteration1')
     .addTag('Health', '健康检查')
     .addTag('Devices', '设备管理')
@@ -76,7 +75,8 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api/docs', app, document);
 
-  const port = process.env.PORT || 3000;
+  // 端口配置：直接使用固定端口 8360；如需自定义，请修改此常量
+  const port = 8360;
   await app.listen(port);
 
   console.log(`\n✅ Maestro Backend Started Successfully!`);
@@ -88,4 +88,3 @@ async function bootstrap() {
 }
 
 bootstrap();
-

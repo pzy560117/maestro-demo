@@ -1,12 +1,4 @@
-import {
-  Controller,
-  Get,
-  Post,
-  Delete,
-  Param,
-  Body,
-  HttpStatus,
-} from '@nestjs/common';
+import { Controller, Get, Post, Delete, Param, Body, HttpStatus } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiParam } from '@nestjs/swagger';
 import { LocatorsService } from './locators.service';
 import { CreateLocatorCandidateDto, GenerateLocatorsDto } from './dto/create-locator.dto';
@@ -25,8 +17,14 @@ export class LocatorsController {
    */
   @Post()
   @ApiOperation({ summary: '创建定位候选' })
-  @ApiResponse({ status: HttpStatus.CREATED, description: '定位候选创建成功', type: LocatorCandidateResponseDto })
-  async create(@Body() createLocatorDto: CreateLocatorCandidateDto): Promise<LocatorCandidateResponseDto> {
+  @ApiResponse({
+    status: HttpStatus.CREATED,
+    description: '定位候选创建成功',
+    type: LocatorCandidateResponseDto,
+  })
+  async create(
+    @Body() createLocatorDto: CreateLocatorCandidateDto,
+  ): Promise<LocatorCandidateResponseDto> {
     return await this.locatorsService.create(createLocatorDto);
   }
 
@@ -35,7 +33,11 @@ export class LocatorsController {
    */
   @Post('generate')
   @ApiOperation({ summary: '自动生成定位候选', description: '基于 DOM 和视觉数据生成定位候选' })
-  @ApiResponse({ status: HttpStatus.OK, description: '生成成功', type: [LocatorCandidateResponseDto] })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: '生成成功',
+    type: [LocatorCandidateResponseDto],
+  })
   async generate(@Body() generateDto: GenerateLocatorsDto): Promise<LocatorCandidateResponseDto[]> {
     return await this.locatorsService.generateLocators(generateDto);
   }
@@ -46,8 +48,14 @@ export class LocatorsController {
   @Get('element/:elementId')
   @ApiOperation({ summary: '查询元素的所有定位候选' })
   @ApiParam({ name: 'elementId', description: '元素 ID' })
-  @ApiResponse({ status: HttpStatus.OK, description: '查询成功', type: [LocatorCandidateResponseDto] })
-  async findByElement(@Param('elementId') elementId: string): Promise<LocatorCandidateResponseDto[]> {
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: '查询成功',
+    type: [LocatorCandidateResponseDto],
+  })
+  async findByElement(
+    @Param('elementId') elementId: string,
+  ): Promise<LocatorCandidateResponseDto[]> {
     return await this.locatorsService.findByElement(elementId);
   }
 
@@ -57,7 +65,11 @@ export class LocatorsController {
   @Get(':id')
   @ApiOperation({ summary: '查询定位候选详情' })
   @ApiParam({ name: 'id', description: '定位候选 ID' })
-  @ApiResponse({ status: HttpStatus.OK, description: '查询成功', type: LocatorCandidateResponseDto })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: '查询成功',
+    type: LocatorCandidateResponseDto,
+  })
   async findOne(@Param('id') id: string): Promise<LocatorCandidateResponseDto> {
     return await this.locatorsService.findOne(id);
   }
@@ -84,4 +96,3 @@ export class LocatorsController {
     return await this.locatorsService.getValidationHistory(elementId);
   }
 }
-

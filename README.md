@@ -20,6 +20,16 @@ Maestro是一个创新的移动端UI自动化测试系统，通过大语言模�
   - ✅ 修复设备分配逻辑，优先使用任务指定设备
   - ✅ 任务在真实设备（66J5T18919000260）上成功执行
   - ✅ 状态：SUCCEEDED，覆盖1个界面，执行时长约10秒
+- [x] 排查遍历任务执行后无日志且设备无动作的根因并提出解决方案（2025-11-06）
+- [x] 重新部署并手动启动调度器，验证新建遍历任务进入RUNNING并生成task_runs/task_run_events（2025-11-06）
+- [x] 修复 GET /api/v1/orchestrator/task-runs/:id BigInt 序列化异常并补充单元测试（2025-11-06）
+- [x] 优化任务调度健壮性：状态机超时保护（60s）、Appium重试机制（3次）、卡住任务自动修复（2025-11-06）
+- [x] 在后端环境文件中配置 DashScope Qwen3 API Key，恢复 LLM 鉴权（2025-11-07）
+- [x] 修复 DashScope 401 鉴权错误：清理密钥空白、补充 DashScope Header 并通过脚本验证（2025-11-07）
+- [x] 优化 Prompt DOM 摘要：限制深度与关键信息提取，显著降低 Token 消耗（2025-11-07）
+- [x] 集成 MidScene DashScope 视觉摘要并注入 LLM Prompt（2025-11-07）
+- [x] 视觉-DOM 匹配与 MidScene 并发时延监控策略落地（2025-11-07）
+- [x] 打通 MinIO 截图预签名 URL 并调整 LLM 调用链路（2025-11-07）
 
 ### 核心特性
 
@@ -54,8 +64,8 @@ npm run dev
 
 **访问应用**:
 - 🌐 前端: http://localhost:5173
-- 📚 API文档: http://localhost:3000/api/docs
-- 💚 健康检查: http://localhost:3000/api/v1/health
+- 📚 API文档: http://localhost:8360/api/docs
+- 💚 健康检查: http://localhost:8360/api/v1/health
 
 👉 **详细指南**: [快速开始文档](docs/guides/QUICKSTART.md)
 
@@ -66,6 +76,7 @@ npm run dev
 ### 🎓 新手指南
 - **[快速开始](docs/guides/QUICKSTART.md)** - 5分钟上手
 - **[本地开发](docs/guides/LOCAL-DEV-GUIDE.md)** - 完整开发环境配置
+- **[后端问题排查](docs/guides/BACKEND-TROUBLESHOOTING.md)** ⭐ - 常见问题快速解决
 - **[项目文档中心](docs/README.md)** - 所有文档索引
 
 ### 📋 需求与设计
@@ -229,9 +240,9 @@ npm run test:integration
 
 ## 🔗 相关链接
 
-- **📚 API文档**: http://localhost:3000/api/docs (Swagger)
+- **📚 API文档**: http://localhost:8360/api/docs (Swagger)
 - **🌐 前端应用**: http://localhost:5173
-- **💚 健康检查**: http://localhost:3000/api/v1/health
+- **💚 健康检查**: http://localhost:8360/api/v1/health
 - **📖 文档中心**: [docs/README.md](docs/README.md)
 - **🐛 问题反馈**: GitHub Issues
 

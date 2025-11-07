@@ -103,7 +103,7 @@ export interface UseWebSocketOptions {
  */
 export function useWebSocket(options: UseWebSocketOptions = {}) {
   const {
-    url = import.meta.env.VITE_WS_URL || 'http://localhost:3000/events',
+    url = import.meta.env.VITE_WS_URL || 'http://localhost:8360/events',
     autoConnect = true,
     reconnection = true,
     reconnectionDelay = 1000,

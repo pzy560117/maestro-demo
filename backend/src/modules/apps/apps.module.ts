@@ -16,4 +16,3 @@ import { DevicesModule } from '../devices/devices.module';
   exports: [AppsService, AppVersionsService],
 })
 export class AppsModule {}
-

@@ -14,7 +14,7 @@ import {
 /**
  * LLM 服务
  * 实现功能 D：LLM 指令生成与安全控制（FR-03/04）
- * 
+ *
  * 验收标准：
  * 1. Qwen3 返回非 JSON 格式时，系统记录错误并触发 fallback
  * 2. 非白名单动作被拦截，任务继续执行默认策略
@@ -37,9 +37,8 @@ export class LlmService {
       apiEndpoint:
         this.configService.get<string>('LLM_API_ENDPOINT') ||
         'http://localhost:8000/v1/chat/completions',
-      apiKey: this.configService.get<string>('LLM_API_KEY') || '',
-      modelName:
-        this.configService.get<string>('LLM_MODEL_NAME') || 'qwen3-vl',
+      apiKey: this.configService.get<string>('LLM_API_KEY')?.trim() || '',
+      modelName: this.configService.get<string>('LLM_MODEL_NAME') || 'qwen3-vl',
       maxTokens: this.configService.get<number>('LLM_MAX_TOKENS') || 6000,
       temperature: this.configService.get<number>('LLM_TEMPERATURE') || 0.7,
       timeoutMs: this.configService.get<number>('LLM_TIMEOUT_MS') || 30000,
@@ -54,7 +53,7 @@ export class LlmService {
   /**
    * 生成动作指令
    * 调用 LLM，进行安全校验，返回动作计划
-   * 
+   *
    * 流程：
    * 1. 构建 Prompt
    * 2. 调用 LLM API
@@ -64,7 +63,7 @@ export class LlmService {
    */
   async generateAction(request: LlmRequest): Promise<LlmResponse> {
     const startTime = Date.now();
-    let logRecord: Partial<LlmLogRecord> = {
+    const logRecord: Partial<LlmLogRecord> = {
       taskRunId: request.taskRunId,
       screenId: request.screenId,
       modelName: this.config.modelName,
@@ -77,26 +76,20 @@ export class LlmService {
 
     try {
       // 1. 构建 Prompt
-      const { systemPrompt, userPrompt } = this.promptBuilder.buildPrompt(
-        request,
-      );
+      const { systemPrompt, userPrompt } = this.promptBuilder.buildPrompt(request);
 
       // 校验 Prompt 长度
       if (
-        !this.promptBuilder.validatePromptLength(
-          systemPrompt + userPrompt,
-          this.config.maxTokens,
-        )
+        !this.promptBuilder.validatePromptLength(systemPrompt + userPrompt, this.config.maxTokens)
       ) {
         throw new Error('Prompt 长度超过限制');
       }
 
       // 2. 调用 LLM API
-      const llmResponse = await this.callLlmApi(
-        systemPrompt,
-        userPrompt,
-        request.screenshotPath,
-      );
+      const llmResponse = await this.callLlmApi(systemPrompt, userPrompt, {
+        localPath: request.screenshotPath,
+        publicUrl: request.screenshotPublicUrl,
+      });
 
       logRecord.promptTokens = llmResponse.usage?.prompt_tokens || 0;
       logRecord.completionTokens = llmResponse.usage?.completion_tokens || 0;
@@ -104,7 +97,9 @@ export class LlmService {
         systemPrompt,
         userPrompt,
         screenshotPath: request.screenshotPath,
+        screenshotPublicUrl: request.screenshotPublicUrl,
         allowedActions: request.allowedActions,
+        visionSummary: request.visionSummary,
       };
       logRecord.responsePayload = llmResponse;
 
@@ -119,9 +114,7 @@ export class LlmService {
 
       if (!safetyResult.passed) {
         // 验收标准2：非白名单动作被拦截
-        this.logger.warn(
-          `Safety check failed: ${safetyResult.reason}`,
-        );
+        this.logger.warn(`Safety check failed: ${safetyResult.reason}`);
 
         logRecord.safetyFlags = {
           rejected: true,
@@ -153,10 +146,7 @@ export class LlmService {
     } catch (error) {
       // 验收标准1：返回非 JSON 格式时记录错误并触发 fallback
       const err = error as any;
-      this.logger.error(
-        `LLM generation failed: ${err.message}`,
-        err.stack,
-      );
+      this.logger.error(`LLM generation failed: ${err.message}`, err.stack);
 
       logRecord.errorCode = err.code || 'UNKNOWN_ERROR';
       logRecord.safetyFlags = {
@@ -188,34 +178,44 @@ export class LlmService {
   private async callLlmApi(
     systemPrompt: string,
     userPrompt: string,
-    screenshotPath?: string,
+    screenshot?: { localPath?: string; publicUrl?: string },
   ): Promise<any> {
-    this.logger.debug(
-      `Calling LLM API: ${this.config.modelName} @ ${this.config.apiEndpoint}`,
-    );
+    const apiKey = this.config.apiKey?.trim();
+
+    if (!apiKey) {
+      throw new Error('LLM API Key 未配置或为空');
+    }
+
+    this.logger.debug(`Calling LLM API: ${this.config.modelName} @ ${this.config.apiEndpoint}`);
 
     try {
       // 构建请求体
-      const messages: any[] = [
-        { role: 'system', content: systemPrompt },
-      ];
+      const messages: any[] = [{ role: 'system', content: systemPrompt }];
 
       // 如果启用多模态且有截图，添加图片
-      if (this.config.multimodal && screenshotPath) {
-        messages.push({
-          role: 'user',
-          content: [
-            { type: 'text', text: userPrompt },
-            {
-              type: 'image_url',
-              image_url: {
-                url: screenshotPath.startsWith('http')
-                  ? screenshotPath
-                  : `file://${screenshotPath}`,
+      if (this.config.multimodal && (screenshot?.publicUrl || screenshot?.localPath)) {
+        const imageUrl = screenshot?.publicUrl
+          ? screenshot.publicUrl
+          : screenshot?.localPath
+            ? `file://${screenshot.localPath}`
+            : undefined;
+
+        if (!imageUrl) {
+          messages.push({ role: 'user', content: userPrompt });
+        } else {
+          messages.push({
+            role: 'user',
+            content: [
+              { type: 'text', text: userPrompt },
+              {
+                type: 'image_url',
+                image_url: {
+                  url: imageUrl,
+                },
               },
-            },
-          ],
-        });
+            ],
+          });
+        }
       } else {
         messages.push({ role: 'user', content: userPrompt });
       }
@@ -232,16 +232,14 @@ export class LlmService {
 
       // 发起 HTTP 请求
       const controller = new AbortController();
-      const timeoutId = setTimeout(
-        () => controller.abort(),
-        this.config.timeoutMs,
-      );
+      const timeoutId = setTimeout(() => controller.abort(), this.config.timeoutMs);
 
       const response = await fetch(this.config.apiEndpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.config.apiKey}`,
+          Authorization: `Bearer ${apiKey}`,
+          'X-DashScope-Token': apiKey,
         },
         body: JSON.stringify(requestBody),
         signal: controller.signal,
@@ -251,9 +249,7 @@ export class LlmService {
 
       if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(
-          `LLM API error: ${response.status} ${response.statusText} - ${errorText}`,
-        );
+        throw new Error(`LLM API error: ${response.status} ${response.statusText} - ${errorText}`);
       }
 
       const result = await response.json();
@@ -262,7 +258,7 @@ export class LlmService {
       return result;
     } catch (error) {
       const err = error as any;
-      
+
       // 处理超时错误
       if (err.name === 'AbortError') {
         throw new Error(`LLM API timeout after ${this.config.timeoutMs}ms`);
@@ -284,8 +280,7 @@ export class LlmService {
    */
   private parseResponse(llmResponse: any): LlmResponse {
     try {
-      const content =
-        llmResponse.choices?.[0]?.message?.content || '{}';
+      const content = llmResponse.choices?.[0]?.message?.content || '{}';
 
       // 尝试解析 JSON
       const parsed = JSON.parse(content);
@@ -336,10 +331,8 @@ export class LlmService {
     const promptTokenPrice = 0.0001; // 每千 tokens
     const completionTokenPrice = 0.0002;
 
-    const promptCost =
-      (logRecord.promptTokens / 1000) * promptTokenPrice;
-    const completionCost =
-      (logRecord.completionTokens / 1000) * completionTokenPrice;
+    const promptCost = (logRecord.promptTokens / 1000) * promptTokenPrice;
+    const completionCost = (logRecord.completionTokens / 1000) * completionTokenPrice;
 
     return promptCost + completionCost;
   }
@@ -348,15 +341,9 @@ export class LlmService {
    * 创建告警
    * 验收标准4：触发策略拒绝时生成告警
    */
-  private async createAlert(
-    safetyResult: any,
-    taskRunId: string,
-  ): Promise<void> {
+  private async createAlert(safetyResult: any, taskRunId: string): Promise<void> {
     try {
-      const alertData = this.safetyCheck.generateAlert(
-        safetyResult,
-        taskRunId,
-      );
+      const alertData = this.safetyCheck.generateAlert(safetyResult, taskRunId);
 
       await this.prisma.alert.create({
         data: {
@@ -379,10 +366,7 @@ export class LlmService {
   /**
    * 查询 LLM 日志
    */
-  async getLlmLogs(
-    taskRunId: string,
-    limit: number = 100,
-  ): Promise<any[]> {
+  async getLlmLogs(taskRunId: string, limit: number = 100): Promise<any[]> {
     return this.prisma.llmLog.findMany({
       where: { taskRunId },
       orderBy: { createdAt: 'desc' },
@@ -390,4 +374,3 @@ export class LlmService {
     });
   }
 }
-
